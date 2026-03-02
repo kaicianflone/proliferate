@@ -81,7 +81,7 @@
   - `pnpm lint` ✅
   - `pnpm test` ✅
 - open comments:
-  - CI and automated review pending.
+  - Pending CI rerun after approval route ownership + terminal side-effect resilience fixes.
 - fixes applied:
   - Added V1 task-session create/lookup helpers and unified service entrypoint.
   - Added terminal task follow-up routing contract: live task -> same session; terminal task -> ad-hoc continuation/rerun with `workerId=null` and `workerRunId=null`.
@@ -100,3 +100,28 @@
 - carry-over TODOs:
   - Resolve CI/human/Greptile feedback.
   - Wire gateway call-sites to V1 session-message orchestration in subsequent phases.
+
+## PR 4
+- branch name: `v1/04-capabilities-approvals-actions`
+- PR URL/number: `https://github.com/proliferate-ai/proliferate/pull/254`
+- scope: Phase 4 live capability and approval lifecycle contracts (capability-authoritative invoke resolution, approval transition guards, terminal-outcome resume-intent semantics, session visibility/ACL authority checks)
+- check results:
+  - `pnpm -C packages/services test src/actions/service.test.ts` ⚠️ blocked in this worktree (`node_modules` missing; `vitest` not found).
+  - `pnpm -C packages/services typecheck` ⚠️ blocked in this worktree (`node_modules` missing; `tsc` not found).
+  - `pnpm -C packages/services lint` ⚠️ blocked in this worktree (`node_modules` missing / local package execution failed).
+- open comments:
+  - Critique 4 actionable items processed; CI rerun pending.
+- fixes applied:
+  - Hardened approval authority to fail closed: only session creator, explicit `reviewer`, or org-admin override can approve/deny.
+  - Removed router-level hard admin prerequisite from approve/deny routes; now computes org-admin override and delegates authority checks to service.
+  - Added actions domain mapper (`packages/services/src/actions/mapper.ts`) and switched router responses to mapped DTOs instead of raw DB rows.
+  - Moved action execution orchestration (`approved -> executing -> completed|failed`) into service (`executeApprovedInvocation`) so router is transport-focused.
+  - Added tool-discovery deny filtering in `GET /available` by resolving effective mode against live `session_capabilities`.
+  - Added atomic DB transition helper (`transitionInvocationWithEffects`) to persist status transition + event + optional resume-intent in one transaction.
+  - Updated terminal approval paths (`markCompleted`, `markFailed`, `approveAction`, `denyAction`, expiry paths) to use atomic transition helper.
+  - Updated unread semantics: `setSessionOperatorStatus` now updates `sessions.lastVisibleUpdateAt` for attention statuses; approval-resolution transitions (`approved|denied|expired`) now touch visibility timestamp.
+  - Expanded service tests to cover ACL edge conditions (`editor`, implicit org viewer, explicit `reviewer`, org-admin override) and atomic transition expectations.
+- merge SHA: `TBD`
+- carry-over TODOs:
+  - Run full checks once dependencies are available in this worktree.
+  - Resolve any additional CI/human/Greptile follow-ups.
