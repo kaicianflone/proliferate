@@ -11,9 +11,11 @@ import {
 	desc,
 	eq,
 	getDb,
+	inArray,
 	sql,
 	wakeEvents,
 } from "@proliferate/services/db/client";
+import type { WakeEventSource, WakeEventStatus } from "@proliferate/shared/contracts";
 
 // ============================================
 // Type Exports
@@ -28,7 +30,7 @@ export type WakeEventRow = InferSelectModel<typeof wakeEvents>;
 export interface CreateWakeEventInput {
 	workerId: string;
 	organizationId: string;
-	source: string;
+	source: WakeEventSource;
 	payloadJson?: unknown;
 }
 
@@ -62,7 +64,7 @@ export async function findWakeEventById(
 export async function updateWakeEventStatus(
 	id: string,
 	organizationId: string,
-	status: string,
+	status: WakeEventStatus,
 	fields?: {
 		coalescedIntoWakeEventId?: string;
 		claimedAt?: Date;
@@ -74,6 +76,58 @@ export async function updateWakeEventStatus(
 	const [row] = await db
 		.update(wakeEvents)
 		.set({ status, ...fields })
+		.where(and(eq(wakeEvents.id, id), eq(wakeEvents.organizationId, organizationId)))
+		.returning();
+	return row;
+}
+
+export async function transitionWakeEventStatus(input: {
+	id: string;
+	organizationId: string;
+	fromStatuses: WakeEventStatus[];
+	toStatus: WakeEventStatus;
+	fields?: {
+		coalescedIntoWakeEventId?: string | null;
+		claimedAt?: Date | null;
+		consumedAt?: Date | null;
+		failedAt?: Date | null;
+	};
+}): Promise<WakeEventRow | undefined> {
+	if (input.fromStatuses.length === 0) {
+		throw new Error("fromStatuses must include at least one status");
+	}
+
+	const db = getDb();
+	const [row] = await db
+		.update(wakeEvents)
+		.set({
+			status: input.toStatus,
+			coalescedIntoWakeEventId: input.fields?.coalescedIntoWakeEventId,
+			claimedAt: input.fields?.claimedAt,
+			consumedAt: input.fields?.consumedAt,
+			failedAt: input.fields?.failedAt,
+		})
+		.where(
+			and(
+				eq(wakeEvents.id, input.id),
+				eq(wakeEvents.organizationId, input.organizationId),
+				inArray(wakeEvents.status, input.fromStatuses),
+			),
+		)
+		.returning();
+
+	return row;
+}
+
+export async function updateWakePayload(
+	id: string,
+	organizationId: string,
+	payloadJson: unknown,
+): Promise<WakeEventRow | undefined> {
+	const db = getDb();
+	const [row] = await db
+		.update(wakeEvents)
+		.set({ payloadJson })
 		.where(and(eq(wakeEvents.id, id), eq(wakeEvents.organizationId, organizationId)))
 		.returning();
 	return row;
@@ -104,6 +158,26 @@ export async function listQueuedByWorker(
 			END`,
 			asc(wakeEvents.createdAt),
 		);
+}
+
+export async function listQueuedByWorkerAndSource(
+	workerId: string,
+	organizationId: string,
+	source: WakeEventSource,
+): Promise<WakeEventRow[]> {
+	const db = getDb();
+	return db
+		.select()
+		.from(wakeEvents)
+		.where(
+			and(
+				eq(wakeEvents.workerId, workerId),
+				eq(wakeEvents.organizationId, organizationId),
+				eq(wakeEvents.status, "queued"),
+				eq(wakeEvents.source, source),
+			),
+		)
+		.orderBy(asc(wakeEvents.createdAt));
 }
 
 export async function listByWorker(
