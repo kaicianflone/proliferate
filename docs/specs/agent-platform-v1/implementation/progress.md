@@ -81,7 +81,7 @@
   - `pnpm lint` ✅
   - `pnpm test` ✅
 - open comments:
-  - Pending CI rerun after approval route ownership + terminal side-effect resilience fixes.
+  - Pending CI rerun after follow-up routing/idempotency patch.
 - fixes applied:
   - Added V1 task-session create/lookup helpers and unified service entrypoint.
   - Added terminal task follow-up routing contract: live task -> same session; terminal task -> ad-hoc continuation/rerun with `workerId=null` and `workerRunId=null`.
@@ -125,3 +125,42 @@
 - carry-over TODOs:
   - Run full checks once dependencies are available in this worktree.
   - Resolve any additional CI/human/Greptile follow-ups.
+
+## PR 5
+- branch name: `v1/05-harnesses-sandbox-runtime`
+- PR URL/number: `https://github.com/proliferate-ai/proliferate/pull/255`
+- scope: Phase 5 harness/runtime split scaffolding (coding harness contract, OpenCode adapter module, manager Claude harness module, daemon event bridge, runtime integration points)
+- check results:
+  - `pnpm typecheck` ✅
+  - `pnpm lint` ✅
+  - `pnpm -C apps/gateway test src/harness/daemon-event-bridge.test.ts src/harness/opencode-coding-harness.test.ts` ✅ (targeted subset for touched harness modules)
+- open comments:
+  - Critique 5 processed; CI rerun pending.
+- fixes applied:
+  - Added shared coding harness interface (`start`, `resume`, `interrupt`, `shutdown`, `streamEvents`, `collectOutputs`).
+  - Added OpenCode coding harness adapter implementation over existing OpenCode API + SSE transport.
+  - Added manager Claude harness adapter module for orchestration-first manager session runtime shape.
+  - Added daemon event bridge to normalize OpenCode/daemon events into runtime event envelopes.
+  - Added daemon bridge tests for event-channel and terminal-event normalization semantics.
+  - Updated runtime to instantiate harness adapters and use normalized daemon-event hooks.
+  - Added explicit harness-family selection by `sessions.kind` (`manager-claude` vs `coding-opencode`) in runtime lifecycle.
+  - Extended gateway session context records to carry `kind` from DB rows.
+  - Updated manager runtime initialization to call `start()` for cold init and `resume()` only for auto reconnect.
+  - Tightened coding-harness resume fallback to reuse only on transient lookup errors and rethrow non-transient failures.
+  - Routed OpenCode session resolution + event-stream connection through the coding-harness adapter contract (removed runtime direct lookup/list/SSE wiring).
+  - Added daemon bridge test coverage for `session.error` terminal normalization.
+  - Added harness adapter unit tests for resume behavior across success/transient/non-transient lookup paths.
+  - Fixed runtime boot-order inversion by moving manager harness `start/resume` until after sandbox provisioning and provider readiness.
+  - Added manager-specific runtime branch so `kind=manager` sessions skip OpenCode readiness/session/SSE initialization entirely.
+  - Updated manager readiness semantics (`isReady`) to rely on provisioned sandbox/provider state instead of OpenCode session state.
+  - Corrected daemon bridge terminal classification so `session.idle` is non-terminal and only error events mark terminal.
+  - Added `sendPrompt` to the coding-harness adapter contract and routed prompt submission through `SessionRuntime` + adapter boundary.
+  - Routed cancellation through adapter-backed `interrupt` via `SessionRuntime.interruptCurrentRun`.
+  - Routed transcript bootstrap through adapter-backed `collectOutputs` via `SessionRuntime.collectOutputs` (removed hub direct OpenCode message fetch coupling).
+  - Made harness contract payloads provider-agnostic: normalized daemon event now carries generic `payload: unknown`, and collect-output contract returns canonical `Message[]` instead of OpenCode-specific rows.
+  - Updated hub runtime event handling to consume normalized daemon envelopes and only process payloads that satisfy an `OpenCodeEvent` type guard.
+  - Added adapter tests covering `sendPrompt` and `collectOutputs` behavior.
+- merge SHA: `TBD`
+- carry-over TODOs:
+  - Wire manager Claude harness behavior into end-to-end orchestration loops in later phases.
+  - Run full `pnpm test` suite as stack-level validation in PR8.
