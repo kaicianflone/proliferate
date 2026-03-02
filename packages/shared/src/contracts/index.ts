@@ -275,6 +275,14 @@ export * from "./v1-entities";
 // Re-export harness contract interfaces
 export type {
 	RuntimeDaemonEvent,
+	DaemonStreamType,
+	DaemonStreamEnvelope,
+	WorkspaceSessionState,
+	WorkspaceStateInfo,
+	ServiceStatus,
+	ServiceEntry,
+	PreviewPort,
+	FsTreeEntry,
 	CodingHarnessPromptImage,
 	CodingHarnessStartInput,
 	CodingHarnessStartResult,

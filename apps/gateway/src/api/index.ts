@@ -11,6 +11,7 @@ import type { GatewayEnv } from "../lib/env";
 import healthRouter from "./health";
 import { createProliferateHttpRoutes } from "./proliferate/http";
 import { createProliferateWsHandler } from "./proliferate/ws";
+import { createDaemonProxyRoutes } from "./proxy/daemon";
 import { createDevtoolsProxyRoutes } from "./proxy/devtools";
 import { createProxyRoutes } from "./proxy/opencode";
 import { createPreviewHealthRoutes } from "./proxy/preview-health";
@@ -28,6 +29,9 @@ export function mountRoutes(app: Express, hubManager: HubManager, env: GatewayEn
 	app.use("/proxy", createDevtoolsProxyRoutes(hubManager, env));
 	app.use("/proxy", createVscodeProxyRoutes(hubManager, env));
 	app.use("/proxy", createPreviewHealthRoutes(hubManager, env));
+
+	// Daemon proxy routes (G1: hop 2 gateway -> daemon)
+	app.use("/proliferate", createDaemonProxyRoutes(hubManager, env));
 }
 
 export function setupWebSocket(server: Server, hubManager: HubManager, env: GatewayEnv): void {

@@ -11,6 +11,7 @@ import type {
 	AutoStartOutputMessage,
 	GitResultMessage,
 	GitState,
+	WorkspaceStateInfo,
 } from "@proliferate/shared";
 import type { ExtendedMessage, MessagePart, TaskToolMetadata } from "../message-converter";
 import { type EnvRequest, type ServerPart, convertServerParts } from "./types";
@@ -46,6 +47,7 @@ export interface MessageHandlerContext {
 		React.SetStateAction<ActionApprovalRequestMessage["payload"][]>
 	>;
 	setError: (error: string | null) => void;
+	setWorkspaceState: (state: WorkspaceStateInfo | null) => void;
 	onTitleUpdate: (title: string) => void;
 	streamingTextRef: React.MutableRefObject<Record<string, string>>;
 	getLastAssistantMessageId: () => string | null;

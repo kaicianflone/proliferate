@@ -454,6 +454,35 @@ export interface NotificationMessage {
 	};
 }
 
+// Daemon stream events forwarded through gateway to workspace panels
+export interface DaemonStreamMessage {
+	type: "daemon_stream";
+	payload: import("./contracts/harness").DaemonStreamEnvelope;
+}
+
+export interface WorkspaceStateMessage {
+	type: "workspace_state";
+	payload: import("./contracts/harness").WorkspaceStateInfo;
+}
+
+export interface PortEventMessage {
+	type: "port_event";
+	payload: {
+		action: "opened" | "closed";
+		port: number;
+		host?: string;
+	};
+}
+
+export interface FsChangeMessage {
+	type: "fs_change";
+	payload: {
+		action: "write" | "delete" | "rename" | "create";
+		path: string;
+		size?: number;
+	};
+}
+
 export type ServerMessage =
 	| InitMessage
 	| NewMessageEvent
@@ -481,7 +510,11 @@ export type ServerMessage =
 	| ActionApprovalResultMessage
 	| ActionCompletedMessage
 	| ControlPlaneSnapshotMessage
-	| NotificationMessage;
+	| NotificationMessage
+	| DaemonStreamMessage
+	| WorkspaceStateMessage
+	| PortEventMessage
+	| FsChangeMessage;
 
 export * from "./auth";
 

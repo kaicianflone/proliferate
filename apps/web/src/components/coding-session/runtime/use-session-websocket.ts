@@ -16,6 +16,7 @@ import type {
 	GitResultMessage,
 	GitState,
 	GitStatusMessage,
+	WorkspaceStateInfo,
 } from "@proliferate/shared";
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { ExtendedMessage } from "../message-converter";
@@ -54,6 +55,7 @@ interface UseSessionWebSocketReturn {
 	gitState: GitState | null;
 	gitResult: GitResultMessage["payload"] | null;
 	pendingApprovals: ActionApprovalRequestMessage["payload"][];
+	workspaceState: WorkspaceStateInfo | null;
 	sendPrompt: (content: string, images?: string[]) => void;
 	sendCancel: () => void;
 	sendRunAutoStart: (
@@ -179,6 +181,7 @@ export function useSessionWebSocket({
 	const [pendingApprovals, setPendingApprovals] = useState<
 		ActionApprovalRequestMessage["payload"][]
 	>([]);
+	const [workspaceState, setWorkspaceState] = useState<WorkspaceStateInfo | null>(null);
 
 	const streamingTextRef = useRef<Record<string, string>>({});
 	const messagesRef = useRef<ExtendedMessage[]>([]);
@@ -221,6 +224,7 @@ export function useSessionWebSocket({
 			setGitResult,
 			setPendingApprovals,
 			setError,
+			setWorkspaceState,
 			onTitleUpdate,
 			streamingTextRef,
 			getLastAssistantMessageId,
@@ -389,6 +393,7 @@ export function useSessionWebSocket({
 		gitState,
 		gitResult,
 		pendingApprovals,
+		workspaceState,
 		sendPrompt,
 		sendCancel,
 		sendRunAutoStart,
@@ -536,6 +541,29 @@ function handleServerMessage(data: ServerMessage, ctx: MessageHandlerContext) {
 			break;
 
 		case "control_plane_snapshot":
+			break;
+
+		// G7: Workspace state updates from daemon
+		case "workspace_state":
+			if (data.payload) {
+				ctx.setWorkspaceState(data.payload as WorkspaceStateInfo);
+			}
+			break;
+
+		// G1: Daemon stream envelope (pty_out, fs_change, port_opened, etc.)
+		case "daemon_stream":
+			// Increment activity tick to trigger panel refreshes (files, services)
+			ctx.incrementActivityTick();
+			break;
+
+		// G4: Port events (preview port opened/closed)
+		case "port_event":
+			ctx.incrementActivityTick();
+			break;
+
+		// G3: File system changes
+		case "fs_change":
+			ctx.incrementActivityTick();
 			break;
 	}
 }
