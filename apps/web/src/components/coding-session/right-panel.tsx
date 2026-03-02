@@ -13,6 +13,7 @@ import { KeyRound, Loader2, MousePointerClick } from "lucide-react";
 import dynamic from "next/dynamic";
 import { ArtifactsPanel } from "./artifacts-panel";
 import { EnvironmentPanel } from "./environment-panel";
+import { FilesPanel } from "./files-panel";
 import { GitPanel } from "./git-panel";
 import { InvestigationPanel } from "./investigation-panel";
 import { PanelErrorBoundary } from "./panel-error-boundary";
@@ -77,6 +78,8 @@ interface RightPanelProps {
 	previewUrl?: string | null;
 	runId?: string;
 	isSetupSession?: boolean;
+	/** Session kind: "worker" (default coding) or "manager" (simplified panel set). */
+	sessionKind?: "worker" | "manager";
 }
 
 export function RightPanel({
@@ -85,6 +88,7 @@ export function RightPanel({
 	previewUrl,
 	runId,
 	isSetupSession = false,
+	sessionKind = "worker",
 }: RightPanelProps) {
 	const { mode, togglePanel } = usePreviewPanelStore();
 
@@ -211,6 +215,19 @@ export function RightPanel({
 		// Services panel
 		if (mode.type === "services" && sessionProps?.sessionId) {
 			return <ServicesPanel sessionId={sessionProps.sessionId} />;
+		}
+
+		// Files panel (G3)
+		if (mode.type === "files" && sessionProps?.sessionId) {
+			// Manager sessions don't have coding panels (G9)
+			if (sessionKind === "manager") {
+				return (
+					<div className="flex flex-col h-full items-center justify-center text-muted-foreground">
+						<p className="text-sm">Files panel is not available for manager sessions</p>
+					</div>
+				);
+			}
+			return <FilesPanel sessionId={sessionProps.sessionId} />;
 		}
 
 		// VS Code panel

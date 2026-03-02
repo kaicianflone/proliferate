@@ -20,6 +20,7 @@ import {
 	ArrowLeft,
 	ArrowRightLeft,
 	Code,
+	FolderTree,
 	GitBranch,
 	Globe,
 	KeyRound,
@@ -41,15 +42,23 @@ import { SetupSessionChrome } from "./setup-session-chrome";
 import { Thread } from "./thread";
 import { SessionContext } from "./tool-ui";
 import { useCodingSessionRuntime } from "./use-coding-session-runtime";
+import { WorkspaceStateBanner, deriveWorkspaceState } from "./workspace-state-banner";
 
 const PANEL_TABS = [
 	{ type: "url" as const, label: "Preview", icon: Globe },
+	{ type: "files" as const, label: "Files", icon: FolderTree },
 	{ type: "vscode" as const, label: "Code", icon: Code },
 	{ type: "terminal" as const, label: "Terminal", icon: SquareTerminal },
 	{ type: "git" as const, label: "Git", icon: GitBranch },
 	{ type: "services" as const, label: "Services", icon: Layers },
 	{ type: "artifacts" as const, label: "Workspace", icon: Zap },
 	{ type: "environment" as const, label: "Env", icon: KeyRound },
+	{ type: "settings" as const, label: "Settings", icon: Settings },
+];
+
+/** Manager sessions: simplified panel set (G9). */
+const MANAGER_PANEL_TABS = [
+	{ type: "terminal" as const, label: "Terminal", icon: SquareTerminal },
 	{ type: "settings" as const, label: "Settings", icon: Settings },
 ];
 
@@ -106,6 +115,7 @@ export function CodingSession({
 		sendGitCreatePr,
 		clearGitResult,
 		pendingApprovals,
+		workspaceState,
 		wsToken,
 	} = useCodingSessionRuntime({
 		sessionId,
@@ -174,10 +184,17 @@ export function CodingSession({
 		}
 	}, [runId, togglePanel, mode.type]);
 
+	// G9: Manager sessions use a simplified panel set
+	const isManagerSession = sessionData?.sessionType === "manager";
+	const basePanelTabs = isManagerSession ? MANAGER_PANEL_TABS : PANEL_TABS;
+
 	// Build panel tabs — prepend investigation tab when runId is present
 	const effectivePanelTabs = runId
-		? [{ type: "investigation" as const, label: "Investigate", icon: AlertTriangle }, ...PANEL_TABS]
-		: PANEL_TABS;
+		? [
+				{ type: "investigation" as const, label: "Investigate", icon: AlertTriangle },
+				...basePanelTabs,
+			]
+		: basePanelTabs;
 
 	// Combine all loading states
 	const isLoading =
@@ -515,6 +532,18 @@ export function CodingSession({
 		</ResizablePanel>
 	);
 
+	// G7: Derive workspace banner state from WS workspace_state or session DB row
+	const bannerState = workspaceState
+		? workspaceState.state
+		: sessionData
+			? deriveWorkspaceState({
+					status: sessionData.status,
+					outcome: sessionData.outcome,
+					pauseReason: sessionData.pauseReason,
+					sandboxId: sessionData.sandboxId,
+				})
+			: "running";
+
 	const toolPane = (
 		<ResizablePanel
 			defaultSize={panelSizes[1] || 65}
@@ -523,6 +552,13 @@ export function CodingSession({
 			className="flex flex-col"
 		>
 			{panelTabsHeader}
+			<WorkspaceStateBanner
+				state={bannerState}
+				pauseReason={workspaceState?.pauseReason ?? sessionData?.pauseReason}
+				outcome={workspaceState?.outcome ?? sessionData?.outcome}
+				errorCode={workspaceState?.errorCode}
+				sandboxAvailable={workspaceState?.sandboxAvailable ?? !!sessionData?.sandboxId}
+			/>
 			<div className="flex-1 min-h-0 p-2">
 				<div className="h-full rounded-xl border border-border bg-background overflow-hidden">
 					<RightPanel
@@ -531,6 +567,7 @@ export function CodingSession({
 						previewUrl={previewUrl}
 						runId={runId}
 						isSetupSession={isSetupSession}
+						sessionKind={isManagerSession ? "manager" : "worker"}
 					/>
 				</div>
 			</div>
@@ -572,6 +609,7 @@ export function CodingSession({
 						previewUrl={previewUrl}
 						runId={runId}
 						isSetupSession={isSetupSession}
+						sessionKind={isManagerSession ? "manager" : "worker"}
 					/>
 				) : (
 					leftPaneContent

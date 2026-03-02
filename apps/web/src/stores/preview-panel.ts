@@ -14,7 +14,8 @@ export type PreviewMode =
 	| { type: "artifacts" }
 	| { type: "services" }
 	| { type: "environment" }
-	| { type: "investigation" };
+	| { type: "investigation" }
+	| { type: "files" };
 
 // Mobile view state - on mobile we either show chat or preview (full screen)
 export type MobileView = "chat" | "preview";
@@ -45,7 +46,8 @@ interface PreviewPanelState {
 			| "artifacts"
 			| "services"
 			| "environment"
-			| "investigation",
+			| "investigation"
+			| "files",
 	) => void;
 
 	// Pin/unpin tabs in header
@@ -108,7 +110,8 @@ export const usePreviewPanelStore = create<PreviewPanelState>()(
 					| "artifacts"
 					| "services"
 					| "environment"
-					| "investigation",
+					| "investigation"
+					| "files",
 			) => {
 				const { mode } = get();
 				if (mode.type === type) {

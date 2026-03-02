@@ -71,6 +71,71 @@ export interface CodingHarnessCollectOutputsInput {
 }
 
 // ---------------------------------------------------------------------------
+// Daemon stream envelope (shared between daemon and gateway)
+// ---------------------------------------------------------------------------
+
+export type DaemonStreamType =
+	| "pty_out"
+	| "fs_change"
+	| "agent_event"
+	| "port_opened"
+	| "port_closed"
+	| "sys_event";
+
+export interface DaemonStreamEnvelope {
+	v: "1";
+	stream: DaemonStreamType;
+	seq: number;
+	event: "data" | "close" | "error";
+	payload: unknown;
+	ts: number;
+}
+
+// ---------------------------------------------------------------------------
+// Workspace state types (used by workspace panels)
+// ---------------------------------------------------------------------------
+
+export type WorkspaceSessionState =
+	| "running"
+	| "paused"
+	| "waiting_for_approval"
+	| "completed"
+	| "failed";
+
+export interface WorkspaceStateInfo {
+	state: WorkspaceSessionState;
+	/** If paused, reason. */
+	pauseReason?: string | null;
+	/** If completed or failed, the outcome. */
+	outcome?: string | null;
+	/** If failed, canonical error code. */
+	errorCode?: string | null;
+	/** Whether sandbox is still reachable. */
+	sandboxAvailable: boolean;
+}
+
+export type ServiceStatus = "starting" | "running" | "degraded" | "stopped";
+
+export interface ServiceEntry {
+	name: string;
+	status: ServiceStatus;
+	port?: number | null;
+	command?: string;
+}
+
+export interface PreviewPort {
+	port: number;
+	host?: string;
+}
+
+export interface FsTreeEntry {
+	name: string;
+	path: string;
+	type: "file" | "directory" | "symlink";
+	size?: number;
+}
+
+// ---------------------------------------------------------------------------
 // Manager harness
 // ---------------------------------------------------------------------------
 
