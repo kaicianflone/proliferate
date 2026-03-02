@@ -1,4 +1,4 @@
-import { automations, runs, triggers } from "@proliferate/services";
+import { automations, runs, triggers, wakes } from "@proliferate/services";
 import type { TriggerDefinition, TriggerEvent } from "@proliferate/triggers";
 import { logger as rootLogger } from "./logger.js";
 
@@ -47,6 +47,15 @@ export async function processTriggerEvents(
 			skipped++;
 		}
 		return { processed, skipped };
+	}
+
+	// V1 Bridge: if automation is bound to a V1 worker, create wake_events instead of runs
+	const workerId = await automations.getAutomationWorkerId(
+		triggerRow.automationId,
+		triggerRow.organizationId,
+	);
+	if (workerId) {
+		return bridgeToWakeEvents(workerId, triggerRow, triggerDef, events);
 	}
 
 	const parsedConfig = triggerDef.configSchema.safeParse(triggerRow.config ?? {});
@@ -146,4 +155,100 @@ function toRawPayload(payload: unknown): Record<string, unknown> {
 		return payload as Record<string, unknown>;
 	}
 	return { payload } as Record<string, unknown>;
+}
+
+/**
+ * V1 Bridge: route trigger events to wake_events(source=webhook) for a V1 worker.
+ * Deduplicates by checking for an existing queued webhook wake before creating.
+ */
+async function bridgeToWakeEvents(
+	workerId: string,
+	triggerRow: TriggerRowLike,
+	triggerDef: TriggerDefinition,
+	events: TriggerEvent[],
+): Promise<ProcessResult> {
+	let processed = 0;
+	let skipped = 0;
+
+	for (const event of events) {
+		const dedupKey = triggerDef.idempotencyKey(event);
+		const providerEventType = inferProviderEventType(triggerRow.provider, event.payload);
+		const rawPayload = toRawPayload(event.payload);
+
+		if (!triggerDef.filter(event, triggerRow.config ?? {})) {
+			await safeCreateSkippedEvent({
+				triggerId: triggerRow.id,
+				organizationId: triggerRow.organizationId,
+				externalEventId: event.externalId,
+				providerEventType,
+				rawPayload,
+				parsedContext: null,
+				dedupKey,
+				skipReason: "filter_mismatch",
+			});
+			skipped++;
+			continue;
+		}
+
+		if (dedupKey) {
+			const isDuplicate = await triggers.eventExistsByDedupKey(triggerRow.id, dedupKey);
+			if (isDuplicate) {
+				skipped++;
+				continue;
+			}
+		}
+
+		const parsedContext = triggerDef.context(event) as Record<string, unknown>;
+
+		try {
+			await wakes.createWakeEvent({
+				workerId,
+				organizationId: triggerRow.organizationId,
+				source: "webhook",
+				payloadJson: {
+					triggerId: triggerRow.id,
+					provider: triggerRow.provider,
+					externalEventId: event.externalId,
+					context: parsedContext,
+					dedupeKey: dedupKey ?? undefined,
+				},
+			});
+			await triggers.createEvent({
+				triggerId: triggerRow.id,
+				organizationId: triggerRow.organizationId,
+				externalEventId: event.externalId,
+				providerEventType,
+				rawPayload,
+				parsedContext,
+				dedupKey,
+				status: "queued",
+			});
+			processed++;
+		} catch (err) {
+			logger.error(
+				{ err, workerId, triggerId: triggerRow.id },
+				"Failed to create wake event for V1 bridge",
+			);
+			await safeCreateSkippedEvent({
+				triggerId: triggerRow.id,
+				organizationId: triggerRow.organizationId,
+				externalEventId: event.externalId,
+				providerEventType,
+				rawPayload,
+				parsedContext,
+				dedupKey,
+				skipReason: "wake_create_failed",
+			});
+			skipped++;
+		}
+	}
+
+	if (processed > 0) {
+		logger.info(
+			{ workerId, triggerId: triggerRow.id, processed, skipped },
+			"V1 bridge: routed trigger events to wake_events",
+		);
+	}
+
+	return { processed, skipped };
 }
