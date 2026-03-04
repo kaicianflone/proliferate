@@ -11,30 +11,13 @@ import {
 	CreateTriggerInputSchema,
 	TriggerEventSchema,
 	TriggerEventWithRelationsSchema,
+	TriggerProvidersResponseSchema,
 	TriggerSchema,
 	TriggerWithIntegrationSchema,
 	UpdateTriggerInputSchema,
 } from "@proliferate/shared";
 import { z } from "zod";
 import { orgProcedure, publicProcedure } from "./middleware";
-
-const TriggerProviderMetadataSchema = z.object({
-	name: z.string(),
-	description: z.string(),
-	icon: z.string(),
-});
-
-const TriggerProviderInfoSchema = z.object({
-	id: z.string(),
-	provider: z.string(),
-	triggerType: z.enum(["webhook", "polling"]).optional(),
-	metadata: TriggerProviderMetadataSchema,
-	configSchema: z.unknown(),
-});
-
-const TriggerProvidersResponseSchema = z.object({
-	providers: z.record(TriggerProviderInfoSchema),
-});
 
 export const triggersRouter = {
 	/**

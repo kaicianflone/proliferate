@@ -94,7 +94,8 @@ export function createDataServices(network: NetworkOutputs): DataOutputs {
 		tier: redisTier,
 		memorySizeGb: redisMemoryGb,
 		authorizedNetwork: network.network.id,
-		transitEncryptionMode: "DISABLED",
+		transitEncryptionMode: "SERVER_AUTHENTICATION",
+		authEnabled: true,
 	});
 
 	return {

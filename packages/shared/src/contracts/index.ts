@@ -2,6 +2,44 @@
 export type { ErrorResponse, Pagination } from "./common";
 export { ErrorResponseSchema, PaginationSchema } from "./common";
 
+// Re-export auth types
+export type { AuthProviders } from "./auth";
+export { AuthProvidersSchema } from "./auth";
+
+// Re-export billing types
+export type {
+	BillingSettings,
+	OverageState,
+	BillingInfo,
+	BuyCreditsResponse,
+	ActivatePlanResponse,
+	UpdateBillingSettingsResponse,
+} from "./billing";
+export {
+	BillingSettingsSchema,
+	OverageStateSchema,
+	BillingInfoSchema,
+	BuyCreditsResponseSchema,
+	ActivatePlanResponseSchema,
+	UpdateBillingSettingsResponseSchema,
+} from "./billing";
+
+// Re-export template types
+export type { IntegrationRequirement, TemplateTrigger, AutomationTemplate } from "./templates";
+export {
+	IntegrationRequirementSchema,
+	TemplateTriggerSchema,
+	AutomationTemplateSchema,
+} from "./templates";
+
+// Re-export baseline types
+export type { RepoBaselineStatus, RepoBaseline, RepoBaselineTarget } from "./baselines";
+export {
+	RepoBaselineStatusSchema,
+	RepoBaselineSchema,
+	RepoBaselineTargetSchema,
+} from "./baselines";
+
 // Re-export admin types
 export {
 	AdminUserOrgSchema,
@@ -110,7 +148,13 @@ export type { Schedule, UpdateScheduleInput } from "./schedules";
 export { ScheduleSchema, UpdateScheduleInputSchema } from "./schedules";
 
 // Re-export secret types
-export type { Secret, CreateSecretInput, CheckSecretsInput, BulkImportInput } from "./secrets";
+export type {
+	Secret,
+	CreateSecretInput,
+	CheckSecretsInput,
+	BulkImportInput,
+	SecretFileMeta,
+} from "./secrets";
 export {
 	SecretSchema,
 	CreateSecretInputSchema,
@@ -118,6 +162,7 @@ export {
 	CheckSecretsResultSchema,
 	BulkImportInputSchema,
 	BulkImportResultSchema,
+	SecretFileMetaSchema,
 } from "./secrets";
 
 // Re-export trigger types
@@ -129,6 +174,9 @@ export type {
 	CreateTriggerInput,
 	UpdateTriggerInput,
 	TriggerProvider,
+	TriggerProviderMetadata,
+	TriggerProviderInfo,
+	TriggerProvidersResponse,
 } from "./triggers";
 export {
 	TriggerSchema,
@@ -140,6 +188,9 @@ export {
 	TriggerTypeSchema,
 	ExecutionModeSchema,
 	TriggerProviderSchema,
+	TriggerProviderMetadataSchema,
+	TriggerProviderInfoSchema,
+	TriggerProvidersResponseSchema,
 } from "./triggers";
 
 // Re-export automation types
@@ -190,6 +241,7 @@ export type {
 	NotificationPayload,
 	Notification,
 	CategoryRouting,
+	NotificationFilter,
 } from "./notifications";
 export {
 	NotificationCategorySchema,
@@ -198,6 +250,7 @@ export {
 	NotificationStatusSchema,
 	NotificationPayloadSchema,
 	NotificationSchema,
+	NotificationFilterSchema,
 	CATEGORY_ROUTING,
 	SUPPRESSION_WINDOW_MS,
 	MAX_NOTIFICATIONS_PER_WORKER_PER_HOUR,

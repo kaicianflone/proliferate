@@ -6,17 +6,9 @@
  */
 
 import { notifications } from "@proliferate/services";
-import { NotificationSchema } from "@proliferate/shared/contracts";
+import { NotificationFilterSchema, NotificationSchema } from "@proliferate/shared/contracts";
 import { z } from "zod";
 import { orgProcedure } from "./middleware";
-
-const NotificationFilterSchema = z.object({
-	status: z.string().optional(),
-	category: z.string().optional(),
-	workerId: z.string().uuid().optional(),
-	before: z.string().datetime().optional(),
-	limit: z.number().int().min(1).max(100).optional(),
-});
 
 export const notificationsRouter = {
 	/**

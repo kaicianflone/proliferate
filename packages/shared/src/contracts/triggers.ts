@@ -161,3 +161,31 @@ export const TriggerEventWithRelationsSchema = TriggerEventSchema.extend({
 });
 
 export type TriggerEventWithRelations = z.infer<typeof TriggerEventWithRelationsSchema>;
+
+// ============================================
+// Trigger provider metadata (from trigger-service)
+// ============================================
+
+export const TriggerProviderMetadataSchema = z.object({
+	name: z.string(),
+	description: z.string(),
+	icon: z.string(),
+});
+
+export type TriggerProviderMetadata = z.infer<typeof TriggerProviderMetadataSchema>;
+
+export const TriggerProviderInfoSchema = z.object({
+	id: z.string(),
+	provider: z.string(),
+	triggerType: z.enum(["webhook", "polling"]).optional(),
+	metadata: TriggerProviderMetadataSchema,
+	configSchema: z.unknown(),
+});
+
+export type TriggerProviderInfo = z.infer<typeof TriggerProviderInfoSchema>;
+
+export const TriggerProvidersResponseSchema = z.object({
+	providers: z.record(TriggerProviderInfoSchema),
+});
+
+export type TriggerProvidersResponse = z.infer<typeof TriggerProvidersResponseSchema>;

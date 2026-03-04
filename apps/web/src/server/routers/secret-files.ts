@@ -10,20 +10,13 @@ import { logger } from "@/lib/logger";
 import { ORPCError } from "@orpc/server";
 import { configurations, orgs, secretFiles, sessions } from "@proliferate/services";
 import type { SandboxProviderType } from "@proliferate/shared";
+import { SecretFileMetaSchema } from "@proliferate/shared/contracts";
 import { getSandboxProvider } from "@proliferate/shared/providers";
 import { z } from "zod";
 import { orgProcedure } from "./middleware";
 import { normalizeSecretFilePathForSandbox } from "./secret-files-utils";
 
 export { normalizeSecretFilePathForSandbox };
-
-const SecretFileMetaSchema = z.object({
-	id: z.string().uuid(),
-	filePath: z.string(),
-	description: z.string().nullable(),
-	createdAt: z.string().nullable(),
-	updatedAt: z.string().nullable(),
-});
 
 const SANDBOX_WORKSPACE_ROOT = "/home/user/workspace";
 const SECRET_FILE_WRITE_TIMEOUT_MS = 15_000;

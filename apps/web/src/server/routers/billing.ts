@@ -21,9 +21,15 @@ import {
 	autumnAttach,
 	autumnGetCustomer,
 	canPossiblyStart,
-	computeWarningLevel,
 	getStateMessage,
 } from "@proliferate/shared/billing";
+import {
+	ActivatePlanResponseSchema,
+	BillingInfoSchema,
+	BillingSettingsSchema,
+	BuyCreditsResponseSchema,
+	UpdateBillingSettingsResponseSchema,
+} from "@proliferate/shared/contracts";
 import { z } from "zod";
 import { orgProcedure } from "./middleware";
 
@@ -42,74 +48,6 @@ async function enqueueFastReconcile(orgId: string, trigger: "payment_webhook" | 
 		});
 	}
 }
-
-// ============================================
-// Response Schemas
-// ============================================
-
-const BillingSettingsSchema = z.object({
-	overage_policy: z.enum(["pause", "allow"]),
-	overage_cap_cents: z.number().nullable(),
-});
-
-const OverageStateSchema = z.object({
-	usedCents: z.number(),
-	capCents: z.number().nullable(),
-	cycleMonth: z.string().nullable(),
-	topupCount: z.number(),
-	circuitBreakerActive: z.boolean(),
-});
-
-const BillingInfoSchema = z.object({
-	plan: z.object({
-		id: z.string(),
-		name: z.string(),
-		monthlyPriceCents: z.number(),
-		creditsIncluded: z.number(),
-	}),
-	selectedPlan: z.enum(["dev", "pro"]),
-	hasActiveSubscription: z.boolean(),
-	credits: z.object({
-		balance: z.number(),
-		used: z.number(),
-		included: z.number(),
-		nextResetAt: z.string().nullable(),
-	}),
-	limits: z.object({
-		maxConcurrentSessions: z.number(),
-		maxSnapshots: z.number(),
-		snapshotRetentionDays: z.number(),
-	}),
-	billingSettings: BillingSettingsSchema,
-	overage: OverageStateSchema,
-	// V2 state fields
-	state: z.object({
-		billingState: z.enum(["unconfigured", "trial", "active", "grace", "exhausted", "suspended"]),
-		shadowBalance: z.number(),
-		graceExpiresAt: z.string().nullable(),
-		canStartSession: z.boolean(),
-		stateMessage: z.string(),
-	}),
-});
-
-const BuyCreditsResponseSchema = z.object({
-	success: z.boolean(),
-	checkoutUrl: z.string().optional(),
-	credits: z.number(),
-	priceCents: z.number().optional(),
-	message: z.string().optional(),
-});
-
-const ActivatePlanResponseSchema = z.object({
-	success: z.boolean(),
-	checkoutUrl: z.string().optional(),
-	message: z.string().optional(),
-});
-
-const UpdateSettingsResponseSchema = z.object({
-	success: z.boolean(),
-	settings: BillingSettingsSchema,
-});
 
 const DEFAULT_BILLING_SETTINGS = {
 	overage_policy: "pause" as const,
@@ -239,7 +177,7 @@ export const billingRouter = {
 				overage_cap_cents: z.number().nullable().optional(),
 			}),
 		)
-		.output(UpdateSettingsResponseSchema)
+		.output(UpdateBillingSettingsResponseSchema)
 		.handler(async ({ context, input }) => {
 			// Only admins/owners can update billing settings
 			const role = await getUserOrgRole(context.user.id, context.orgId);

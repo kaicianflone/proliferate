@@ -54,3 +54,17 @@ export const BulkImportResultSchema = z.object({
 	created: z.number().int(),
 	skipped: z.array(z.string()),
 });
+
+// ============================================
+// Secret File Schemas
+// ============================================
+
+export const SecretFileMetaSchema = z.object({
+	id: z.string().uuid(),
+	filePath: z.string(),
+	description: z.string().nullable(),
+	createdAt: z.string().nullable(),
+	updatedAt: z.string().nullable(),
+});
+
+export type SecretFileMeta = z.infer<typeof SecretFileMetaSchema>;

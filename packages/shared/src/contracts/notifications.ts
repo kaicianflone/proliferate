@@ -156,3 +156,17 @@ export const MAX_NOTIFICATIONS_PER_WORKER_PER_HOUR = 30;
 
 /** Categories that are always immediate and never batched or suppressed. */
 export const IMMEDIATE_CATEGORIES: NotificationCategory[] = ["approval_required"];
+
+// ============================================
+// Filter schema (used by list endpoint)
+// ============================================
+
+export const NotificationFilterSchema = z.object({
+	status: z.string().optional(),
+	category: z.string().optional(),
+	workerId: z.string().uuid().optional(),
+	before: z.string().datetime().optional(),
+	limit: z.number().int().min(1).max(100).optional(),
+});
+
+export type NotificationFilter = z.infer<typeof NotificationFilterSchema>;

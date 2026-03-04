@@ -7,16 +7,9 @@
 import { ORPCError } from "@orpc/server";
 import { env } from "@proliferate/environment/server";
 import { signGatewayToken } from "@proliferate/shared";
+import { AuthProvidersSchema } from "@proliferate/shared/contracts";
 import { z } from "zod";
 import { protectedProcedure, publicProcedure } from "./middleware";
-
-const AuthProvidersSchema = z.object({
-	providers: z.object({
-		google: z.boolean(),
-		github: z.boolean(),
-		email: z.boolean(),
-	}),
-});
 
 export const authRouter = {
 	/**

@@ -7,11 +7,10 @@
 import { ORPCError } from "@orpc/server";
 import { baselines } from "@proliferate/services";
 import type { baselines as baselinesTypes } from "@proliferate/services";
-import { REPO_BASELINE_STATUSES } from "@proliferate/shared";
+import { RepoBaselineSchema, RepoBaselineTargetSchema } from "@proliferate/shared/contracts";
 import { z } from "zod";
 import { orgProcedure } from "./middleware";
 
-// Serialize Date fields to ISO strings for JSON transport
 function toIso(d: Date | null | undefined): string | null {
 	if (!d) return null;
 	return d instanceof Date ? d.toISOString() : String(d);
@@ -34,36 +33,6 @@ function serializeTarget(row: TargetRow) {
 		createdAt: toIso(row.createdAt),
 	};
 }
-
-const RepoBaselineStatusSchema = z.enum(REPO_BASELINE_STATUSES as unknown as [string, ...string[]]);
-
-const RepoBaselineSchema = z.object({
-	id: z.string(),
-	repoId: z.string(),
-	organizationId: z.string(),
-	status: RepoBaselineStatusSchema,
-	version: z.string().nullable(),
-	snapshotId: z.string().nullable(),
-	sandboxProvider: z.string().nullable(),
-	setupSessionId: z.string().nullable(),
-	installCommands: z.any().nullable(),
-	runCommands: z.any().nullable(),
-	testCommands: z.any().nullable(),
-	serviceCommands: z.any().nullable(),
-	errorMessage: z.string().nullable(),
-	createdBy: z.string().nullable(),
-	createdAt: z.string().nullable(),
-	updatedAt: z.string().nullable(),
-});
-
-const RepoBaselineTargetSchema = z.object({
-	id: z.string(),
-	repoBaselineId: z.string(),
-	name: z.string(),
-	description: z.string().nullable(),
-	configJson: z.any().nullable(),
-	createdAt: z.string().nullable(),
-});
 
 export const baselinesRouter = {
 	/**

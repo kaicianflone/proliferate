@@ -635,11 +635,8 @@ export class SessionRuntime {
 	private handleSseDisconnect(reason: string): void {
 		this.eventStreamConnected = false;
 		this.eventStreamHandle = null;
-		this.log("SSE disconnected", { reason });
-		this.logLatency("runtime.sse.disconnect", { reason });
-		this.log("SSE disconnected; preserving OpenCode session identity for reconnect", {
+		this.log("SSE disconnected, preserving OpenCode session identity for reconnect", {
 			reason,
-			openCodeUrl: this.openCodeUrl,
 			openCodeSessionId: this.openCodeSessionId,
 		});
 		this.onDisconnect(reason);

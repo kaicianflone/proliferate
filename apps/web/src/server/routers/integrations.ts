@@ -7,14 +7,7 @@
 
 import { isEmailEnabled, sendIntegrationRequestEmail } from "@/lib/email";
 import { logger } from "@/lib/logger";
-import {
-	NANGO_GITHUB_INTEGRATION_ID,
-	NANGO_JIRA_INTEGRATION_ID,
-	NANGO_LINEAR_INTEGRATION_ID,
-	NANGO_SENTRY_INTEGRATION_ID,
-	USE_NANGO_GITHUB,
-	requireNangoIntegrationId,
-} from "@/lib/nango";
+import { USE_NANGO_GITHUB, requireNangoIntegrationId } from "@/lib/nango";
 import { sendSlackConnectInvite } from "@/lib/slack";
 import { ORPCError } from "@orpc/server";
 import { actions, connectors, integrations, secrets } from "@proliferate/services";
