@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
+import { Textarea } from "@/components/ui/textarea";
 import { useCheckSecrets } from "@/hooks/org/use-repos";
 import { useCreateSecret, useDeleteSecret, useSecrets } from "@/hooks/org/use-secrets";
 import { useConfiguration, useConfigurationEnvFiles } from "@/hooks/sessions/use-configurations";
@@ -215,11 +216,11 @@ function PasteEnvForm({
 
 	return (
 		<div className="space-y-2">
-			<textarea
+			<Textarea
 				value={text}
 				onChange={(e) => setText(e.target.value)}
 				placeholder={"Paste .env file contents\n\nKEY=value\nDATABASE_URL=postgres://..."}
-				className="w-full h-32 rounded-md border border-input bg-background px-3 py-2 text-xs resize-none focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+				className="w-full h-32 text-xs resize-none"
 				autoFocus
 			/>
 			<div className="flex items-center justify-between">
@@ -271,14 +272,15 @@ function SecretRow({
 	return (
 		<div className="flex items-center border-b border-border/50 hover:bg-muted/50 transition-colors px-4 py-2.5 group">
 			{/* Key name */}
-			<button
+			<Button
 				type="button"
+				variant="ghost"
 				onClick={handleCopyKey}
-				className="font-mono font-medium text-sm truncate text-left min-w-0 flex-1 hover:text-foreground/80"
+				className="font-mono font-medium text-sm truncate text-left min-w-0 flex-1 hover:text-foreground/80 h-auto p-0 justify-start"
 				title="Click to copy"
 			>
 				{keyName}
-			</button>
+			</Button>
 
 			{/* Hidden value indicator */}
 			<span className="text-muted-foreground text-sm mx-4 shrink-0">••••••••</span>
@@ -648,9 +650,10 @@ export function EnvironmentPanel({
 										</div>
 
 										<div className="rounded-md border border-border/60 p-2.5">
-											<button
+											<Button
 												type="button"
-												className="w-full inline-flex items-center justify-between text-xs font-medium"
+												variant="ghost"
+												className="w-full inline-flex items-center justify-between text-xs font-medium h-auto p-0"
 												onClick={() => setShowLegacyEntry((prev) => !prev)}
 											>
 												<span>Legacy: single env vars</span>
@@ -659,7 +662,7 @@ export function EnvironmentPanel({
 														showLegacyEntry ? "rotate-180" : ""
 													}`}
 												/>
-											</button>
+											</Button>
 										</div>
 
 										{showLegacyEntry && (
@@ -678,14 +681,16 @@ export function EnvironmentPanel({
 															configurationId={configurationId}
 															onSaved={handleRefresh}
 														/>
-														<button
+														<Button
 															type="button"
-															className="inline-flex items-center gap-1 text-[11px] text-muted-foreground hover:text-foreground transition-colors"
+															variant="ghost"
+															size="sm"
+															className="inline-flex items-center gap-1 text-[11px] text-muted-foreground hover:text-foreground h-auto p-0"
 															onClick={() => setPasteMode(true)}
 														>
 															<FileUp className="h-3 w-3" />
 															Paste .env
-														</button>
+														</Button>
 													</div>
 												)}
 

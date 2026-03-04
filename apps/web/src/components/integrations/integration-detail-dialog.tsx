@@ -459,10 +459,12 @@ function SlackSettingsContent({
 									const isAllowed =
 										slackConfig.allowedConfigurationIds?.includes(config.id) ?? false;
 									return (
-										<button
+										<Button
 											key={config.id}
 											type="button"
-											className={`px-2.5 py-1 rounded-md border text-xs transition-colors ${
+											variant="outline"
+											size="sm"
+											className={`px-2.5 py-1 rounded-md text-xs h-auto ${
 												isAllowed
 													? "border-foreground/20 bg-foreground/5 text-foreground"
 													: "border-border text-muted-foreground hover:border-foreground/20"
@@ -480,7 +482,7 @@ function SlackSettingsContent({
 											}}
 										>
 											{config.name || "Untitled"}
-										</button>
+										</Button>
 									);
 								})}
 							</div>

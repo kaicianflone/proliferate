@@ -1,3 +1,5 @@
+"use client";
+
 import type { VerificationFile } from "@proliferate/shared";
 import { create } from "zustand";
 import { persist } from "zustand/middleware";

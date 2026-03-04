@@ -1,7 +1,8 @@
 "use client";
 
 import { PageShell } from "@/components/dashboard/page-shell";
-import { DangerZoneSection, WorkspaceSection } from "@/components/settings/general";
+import { DangerZoneSection } from "@/components/settings/general/danger-zone-section";
+import { WorkspaceSection } from "@/components/settings/general/workspace-section";
 import { useOrgMembers } from "@/hooks/org/use-orgs";
 import { useActiveOrganization, useSession } from "@/lib/auth/client";
 

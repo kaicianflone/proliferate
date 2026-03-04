@@ -10,6 +10,7 @@ import {
 	AlertDialogHeader,
 	AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
+import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { ItemActionsMenu } from "@/components/ui/item-actions-menu";
 import {
@@ -196,17 +197,19 @@ export function ConfigurationGroup({
 								onOpenChange={setMenuOpen}
 							/>
 						</div>
-						<button
+						<Button
 							type="button"
+							variant="ghost"
+							size="icon"
 							onClick={(e) => {
 								e.stopPropagation();
 								handleCreateSession();
 							}}
 							disabled={createSession.isPending}
-							className="p-0.5 rounded text-muted-foreground hover:text-foreground transition-colors"
+							className="h-6 w-6 p-0.5 text-muted-foreground hover:text-foreground"
 						>
 							<Plus className="h-3.5 w-3.5" />
-						</button>
+						</Button>
 					</div>
 				</div>
 

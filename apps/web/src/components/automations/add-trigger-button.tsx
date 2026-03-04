@@ -5,6 +5,7 @@ import {
 	ProviderIcon,
 	getProviderDisplayName,
 } from "@/components/integrations/provider-icon";
+import { Button } from "@/components/ui/button";
 import { DashedAddIconButton } from "@/components/ui/dashed-add-icon-button";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { StackedListButton } from "@/components/ui/stacked-list-button";
@@ -207,13 +208,14 @@ function ProviderPickerList({
 				const needsConnection = integrationProviders.includes(p);
 				const isDisabled = (needsConnection && !connectedProviders.has(p)) || isPending;
 				return (
-					<button
+					<Button
 						key={p}
 						type="button"
+						variant="ghost"
 						disabled={isDisabled}
 						onClick={() => onSelect(p)}
 						className={cn(
-							"flex items-center gap-2.5 px-3 py-2 text-left text-sm transition-colors",
+							"flex items-center gap-2.5 px-3 py-2 text-left text-sm h-auto justify-start w-full rounded-none",
 							isDisabled ? "opacity-40 cursor-not-allowed" : "hover:bg-muted/50",
 						)}
 					>
@@ -226,7 +228,7 @@ function ProviderPickerList({
 						{needsConnection && !connectedProviders.has(p) && (
 							<span className="text-xs text-muted-foreground">Not connected</span>
 						)}
-					</button>
+					</Button>
 				);
 			})}
 		</div>

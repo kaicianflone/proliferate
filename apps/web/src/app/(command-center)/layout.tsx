@@ -6,9 +6,9 @@ import { CommandSearch } from "@/components/dashboard/command-search";
 import { DesktopHeader } from "@/components/dashboard/desktop-header";
 import { MobileSidebar, MobileSidebarTrigger, Sidebar } from "@/components/dashboard/sidebar";
 import { Button } from "@/components/ui/button";
-import { getPageTitle } from "@/config/navigation";
 import { useCommandSearch } from "@/hooks/ui/use-command-search";
 import { useLayoutGate } from "@/hooks/ui/use-layout-gate";
+import { getPageTitle } from "@/lib/display/navigation";
 import { Search } from "lucide-react";
 import { usePathname } from "next/navigation";
 

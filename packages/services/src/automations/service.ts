@@ -35,6 +35,27 @@ import {
 	toNewAutomationListItem,
 } from "./mapper";
 
+export class AutomationNotFoundError extends Error {
+	constructor(message = "Automation not found") {
+		super(message);
+		this.name = "AutomationNotFoundError";
+	}
+}
+
+export class AutomationValidationError extends Error {
+	constructor(message: string) {
+		super(message);
+		this.name = "AutomationValidationError";
+	}
+}
+
+export class AutomationIntegrationNotFoundError extends Error {
+	constructor(message = "Integration not found") {
+		super(message);
+		this.name = "AutomationIntegrationNotFoundError";
+	}
+}
+
 let scheduledQueue: ReturnType<typeof createScheduledQueue> | null = null;
 let pollGroupQueue: ReturnType<typeof createPollGroupQueue> | null = null;
 
@@ -91,6 +112,46 @@ export interface UpdateAutomationInput {
 	allowedConfigurationIds?: string[] | null;
 }
 
+function assertAutomationExistsOrThrow(exists: boolean): void {
+	if (!exists) {
+		throw new AutomationNotFoundError();
+	}
+}
+
+/**
+ * Create automation for an org, defaulting configuration to default/ready
+ * when none is provided.
+ */
+export async function createAutomationForOrg(
+	orgId: string,
+	userId: string,
+	input: CreateAutomationInput,
+): Promise<AutomationListItem> {
+	let defaultConfigurationId = input.defaultConfigurationId;
+	if (!defaultConfigurationId) {
+		const orgConfigurations = await configurationsDb.listAll();
+		const scoped = orgConfigurations.filter((row) =>
+			row.configurationRepos?.some(
+				(configurationRepo) => configurationRepo.repo?.organizationId === orgId,
+			),
+		);
+		const defaultConfig = scoped.find((configuration) => configuration.status === "default");
+		const readyConfig = scoped.find((configuration) => configuration.status === "ready");
+		const selectedConfig = defaultConfig ?? readyConfig;
+		if (!selectedConfig) {
+			throw new AutomationValidationError(
+				"No ready configuration available. Please create a configuration first.",
+			);
+		}
+		defaultConfigurationId = selectedConfig.id;
+	}
+
+	return createAutomation(orgId, userId, {
+		...input,
+		defaultConfigurationId,
+	});
+}
+
 // ============================================
 // Service functions
 // ============================================
@@ -137,7 +198,7 @@ export async function createAutomation(
 			orgId,
 		);
 		if (!configuration) {
-			throw new Error("Configuration not found");
+			throw new AutomationValidationError("Configuration not found");
 		}
 	}
 
@@ -169,20 +230,22 @@ export async function updateAutomation(
 			orgId,
 		);
 		if (!configuration) {
-			throw new Error("Configuration not found");
+			throw new AutomationValidationError("Configuration not found");
 		}
 	}
 
 	// Validate DM notification requires a Slack user
 	if (input.notificationDestinationType === "slack_dm_user" && !input.notificationSlackUserId) {
-		throw new Error("DM notification destination requires a Slack user");
+		throw new AutomationValidationError("DM notification destination requires a Slack user");
 	}
 
 	// Validate agent_decide constraints
 	if (input.configSelectionStrategy === "agent_decide") {
 		const allowedIds = input.allowedConfigurationIds;
 		if (!allowedIds || allowedIds.length === 0) {
-			throw new Error("agent_decide strategy requires at least one allowlisted configuration");
+			throw new AutomationValidationError(
+				"agent_decide strategy requires at least one allowlisted configuration",
+			);
 		}
 
 		// Verify all allowlisted configs have routing descriptions
@@ -192,7 +255,7 @@ export async function updateAutomation(
 		);
 		if (missingDescription.length > 0) {
 			const names = missingDescription.map((c) => c.name).join(", ");
-			throw new Error(
+			throw new AutomationValidationError(
 				`All allowlisted configurations must have routing descriptions. Missing: ${names}`,
 			);
 		}
@@ -283,7 +346,7 @@ export async function getAutomationActionModes(
 	orgId: string,
 ): Promise<automationsDb.ActionModesMap> {
 	const exists = await automationsDb.exists(id, orgId);
-	if (!exists) throw new Error("Automation not found");
+	assertAutomationExistsOrThrow(exists);
 	return automationsDb.getActionModes(id, orgId);
 }
 
@@ -297,7 +360,7 @@ export async function setAutomationActionMode(
 	mode: automationsDb.ActionMode,
 ): Promise<void> {
 	const exists = await automationsDb.exists(id, orgId);
-	if (!exists) throw new Error("Automation not found");
+	assertAutomationExistsOrThrow(exists);
 	await automationsDb.setActionMode(id, orgId, key, mode);
 }
 
@@ -338,9 +401,7 @@ export async function listAutomationEvents(
 ): Promise<ListEventsResult> {
 	// Verify automation belongs to org
 	const exists = await automationsDb.exists(automationId, orgId);
-	if (!exists) {
-		throw new Error("Automation not found");
-	}
+	assertAutomationExistsOrThrow(exists);
 
 	const limit = Math.min(options.limit ?? 50, 100);
 	const offset = options.offset ?? 0;
@@ -419,9 +480,7 @@ export async function listAutomationTriggers(
 ): Promise<AutomationTrigger[]> {
 	// Verify automation belongs to org
 	const exists = await automationsDb.exists(automationId, orgId);
-	if (!exists) {
-		throw new Error("Automation not found");
-	}
+	assertAutomationExistsOrThrow(exists);
 
 	const triggers = await automationsDb.listTriggersForAutomation(automationId);
 	return triggers.map((t) => toAutomationTriggerFromRow(t, gatewayUrl));
@@ -435,9 +494,7 @@ export async function listAutomationConnections(
 	orgId: string,
 ): Promise<automationsDb.AutomationConnectionWithIntegration[]> {
 	const exists = await automationsDb.exists(automationId, orgId);
-	if (!exists) {
-		throw new Error("Automation not found");
-	}
+	assertAutomationExistsOrThrow(exists);
 
 	return automationsDb.listAutomationConnections(automationId);
 }
@@ -451,13 +508,11 @@ export async function addAutomationConnection(
 	integrationId: string,
 ): Promise<void> {
 	const exists = await automationsDb.exists(automationId, orgId);
-	if (!exists) {
-		throw new Error("Automation not found");
-	}
+	assertAutomationExistsOrThrow(exists);
 
 	const integration = await automationsDb.validateIntegration(integrationId, orgId);
 	if (!integration) {
-		throw new Error("Integration not found");
+		throw new AutomationIntegrationNotFoundError();
 	}
 
 	await automationsDb.createAutomationConnection({ automationId, integrationId });
@@ -472,9 +527,7 @@ export async function removeAutomationConnection(
 	integrationId: string,
 ): Promise<void> {
 	const exists = await automationsDb.exists(automationId, orgId);
-	if (!exists) {
-		throw new Error("Automation not found");
-	}
+	assertAutomationExistsOrThrow(exists);
 
 	await automationsDb.deleteAutomationConnection(automationId, integrationId);
 }
@@ -544,14 +597,14 @@ export async function createAutomationTrigger(
 	// Verify automation exists and get its name
 	const automationData = await automationsDb.getAutomationName(automationId, orgId);
 	if (!automationData) {
-		throw new Error("Automation not found");
+		throw new AutomationNotFoundError();
 	}
 
 	// Validate integration if provided
 	if (input.integrationId) {
 		const integration = await automationsDb.validateIntegration(input.integrationId, orgId);
 		if (!integration) {
-			throw new Error("Integration not found");
+			throw new AutomationIntegrationNotFoundError();
 		}
 	}
 
@@ -762,7 +815,7 @@ export async function triggerManualRun(
 	userId: string,
 ): Promise<{ runId: string; status: string }> {
 	const exists = await automationsDb.exists(automationId, orgId);
-	if (!exists) throw new Error("Automation not found");
+	assertAutomationExistsOrThrow(exists);
 
 	// Find or create a dedicated manual trigger (isolated from real triggers).
 	// Uses provider "webhook" with a config flag to stay within the valid TriggerProvider enum.
@@ -849,7 +902,7 @@ export async function getAutomationIntegrationActions(
 	orgId: string,
 ): Promise<IntegrationActions[]> {
 	const automation = await automationsDb.findById(automationId, orgId);
-	if (!automation) throw new Error("Automation not found");
+	if (!automation) throw new AutomationNotFoundError();
 
 	const enabledTools = (automation.enabledTools ?? {}) as Record<
 		string,

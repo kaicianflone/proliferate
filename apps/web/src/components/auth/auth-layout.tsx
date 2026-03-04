@@ -38,12 +38,12 @@ const darkModeVars: React.CSSProperties = {
 export function AuthLayout({ children }: { children: React.ReactNode }) {
 	return (
 		<div
-			className="relative flex min-h-screen flex-col bg-neutral-950 text-neutral-50"
+			className="relative flex min-h-screen flex-col bg-background text-foreground"
 			style={darkModeVars}
 		>
 			{/* Subtle radial gradient background */}
 			<div className="pointer-events-none absolute inset-0 overflow-hidden">
-				<div className="absolute left-1/2 top-0 h-[600px] w-[900px] -translate-x-1/2 -translate-y-1/3 rounded-full bg-neutral-800/20 blur-[120px]" />
+				<div className="absolute left-1/2 top-0 h-[600px] w-[900px] -translate-x-1/2 -translate-y-1/3 rounded-full bg-muted/20 blur-[120px]" />
 			</div>
 
 			{/* Content wrapper — flex-1 to fill space, centers vertically */}
@@ -58,14 +58,14 @@ export function AuthLayout({ children }: { children: React.ReactNode }) {
 
 					{/* Integration badges */}
 					<div className="mt-12 flex flex-col items-center gap-3">
-						<span className="text-xs text-neutral-500">Works with</span>
+						<span className="text-xs text-muted-foreground">Works with</span>
 						<div className="flex items-center gap-2">
 							{INTEGRATIONS.map(({ icon: Icon, label }) => (
 								<div
 									key={label}
-									className="flex h-8 w-8 items-center justify-center rounded-lg border border-neutral-800 bg-neutral-900/60"
+									className="flex h-8 w-8 items-center justify-center rounded-lg border border-border bg-card/60"
 								>
-									<Icon className="h-3.5 w-3.5 text-neutral-500" />
+									<Icon className="h-3.5 w-3.5 text-muted-foreground" />
 								</div>
 							))}
 						</div>
@@ -74,12 +74,12 @@ export function AuthLayout({ children }: { children: React.ReactNode }) {
 			</div>
 
 			{/* Footer — pinned to bottom, doesn't affect centering */}
-			<div className="relative z-10 flex shrink-0 items-center justify-center gap-3 pb-6 text-xs text-neutral-600">
+			<div className="relative z-10 flex shrink-0 items-center justify-center gap-3 pb-6 text-xs text-muted-foreground/60">
 				<a
 					href="https://proliferate.com"
 					target="_blank"
 					rel="noopener noreferrer"
-					className="transition-colors hover:text-neutral-400"
+					className="transition-colors hover:text-muted-foreground"
 				>
 					proliferate.com
 				</a>
@@ -88,7 +88,7 @@ export function AuthLayout({ children }: { children: React.ReactNode }) {
 					href="https://proliferate.com/privacy"
 					target="_blank"
 					rel="noopener noreferrer"
-					className="transition-colors hover:text-neutral-400"
+					className="transition-colors hover:text-muted-foreground"
 				>
 					Privacy
 				</a>
@@ -97,7 +97,7 @@ export function AuthLayout({ children }: { children: React.ReactNode }) {
 					href="https://proliferate.com/terms"
 					target="_blank"
 					rel="noopener noreferrer"
-					className="transition-colors hover:text-neutral-400"
+					className="transition-colors hover:text-muted-foreground"
 				>
 					Terms
 				</a>

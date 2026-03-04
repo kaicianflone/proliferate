@@ -145,20 +145,24 @@ export function QuickSetupForm({ preset, onClose }: QuickSetupFormProps) {
 				{/* Toggle: new key vs existing */}
 				{secretOptions.length > 0 && (
 					<div className="flex items-center gap-3 text-xs">
-						<button
+						<Button
 							type="button"
-							className={`pb-0.5 ${!useExisting ? "text-foreground border-b border-foreground font-medium" : "text-muted-foreground"}`}
+							variant="ghost"
+							size="sm"
+							className={`pb-0.5 h-auto px-0 rounded-none ${!useExisting ? "text-foreground border-b border-foreground font-medium" : "text-muted-foreground"}`}
 							onClick={() => setUseExisting(false)}
 						>
 							New API key
-						</button>
-						<button
+						</Button>
+						<Button
 							type="button"
-							className={`pb-0.5 ${useExisting ? "text-foreground border-b border-foreground font-medium" : "text-muted-foreground"}`}
+							variant="ghost"
+							size="sm"
+							className={`pb-0.5 h-auto px-0 rounded-none ${useExisting ? "text-foreground border-b border-foreground font-medium" : "text-muted-foreground"}`}
 							onClick={() => setUseExisting(true)}
 						>
 							Use existing secret
-						</button>
+						</Button>
 					</div>
 				)}
 

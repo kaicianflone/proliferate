@@ -256,14 +256,15 @@ function PeekDrawerContent({
 									</div>
 								)}
 								{session.automation && (
-									<button
+									<Button
 										type="button"
-										className="flex items-center gap-2 text-foreground hover:text-primary transition-colors"
+										variant="ghost"
+										className="flex items-center gap-2 text-foreground hover:text-primary h-auto p-0 justify-start"
 										onClick={() => router.push(`/coworkers/${session.automation!.id}/events`)}
 									>
 										<Wrench className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
 										<span className="truncate">{session.automation.name}</span>
-									</button>
+									</Button>
 								)}
 							</div>
 						</Section>

@@ -46,12 +46,13 @@ export function StepToolSelection({ onComplete, isSubmitting }: StepToolSelectio
 							const Icon = tool.icon;
 							const isSelected = selected.has(tool.id);
 							return (
-								<button
+								<Button
 									key={tool.id}
 									type="button"
+									variant="outline"
 									onClick={() => toggle(tool.id)}
 									className={cn(
-										"flex items-center gap-2 w-full px-2.5 py-2 rounded-lg border transition-all text-left",
+										"flex items-center gap-2 w-full px-2.5 py-2 rounded-lg transition-all text-left h-auto justify-start",
 										isSelected
 											? "border-primary bg-primary/5 ring-1 ring-primary/20"
 											: "border-border hover:border-foreground/20 bg-card",
@@ -73,7 +74,7 @@ export function StepToolSelection({ onComplete, isSubmitting }: StepToolSelectio
 									>
 										{isSelected && <Check className="h-3 w-3" />}
 									</div>
-								</button>
+								</Button>
 							);
 						})}
 					</div>

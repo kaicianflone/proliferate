@@ -158,10 +158,11 @@ function TreeRow({
 	const indent = depth * 16;
 
 	return (
-		<button
+		<Button
 			type="button"
+			variant="ghost"
 			className={cn(
-				"flex items-center gap-1.5 w-full py-1 px-2 text-left hover:bg-muted/50 transition-colors text-sm",
+				"flex items-center gap-1.5 w-full py-1 px-2 text-left hover:bg-muted/50 text-sm h-auto justify-start rounded-none",
 				isSelected && "bg-muted/70",
 			)}
 			style={{ paddingLeft: `${indent + 8}px` }}
@@ -189,7 +190,7 @@ function TreeRow({
 					{formatFileSize(entry.size)}
 				</span>
 			)}
-		</button>
+		</Button>
 	);
 }
 

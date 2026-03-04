@@ -209,9 +209,9 @@ export default function CoworkersPage() {
 					<div className="flex items-center justify-between gap-4 mb-4">
 						<div className="flex items-center gap-1">
 							{TABS.map((tab) => (
-								<button
+								<Button
 									key={tab.value}
-									type="button"
+									variant="ghost"
 									onClick={() => setActiveTab(tab.value)}
 									className={cn(
 										"flex items-center gap-1.5 px-3 h-7 text-sm rounded-lg transition-colors",
@@ -231,7 +231,7 @@ export default function CoworkersPage() {
 									>
 										{counts[tab.value]}
 									</span>
-								</button>
+								</Button>
 							))}
 						</div>
 						<div className="relative">

@@ -66,8 +66,7 @@ export const MANAGER_TOOLS: Anthropic.Tool[] = [
 	},
 	{
 		name: "list_children",
-		description:
-			"List all child task sessions across all runs. Shows status of every child, including those from previous runs that may still be running.",
+		description: "List all child task sessions spawned during this run.",
 		input_schema: {
 			type: "object" as const,
 			properties: {},
@@ -340,8 +339,7 @@ async function handleSpawnChildTask(
 		return JSON.stringify({ error: "Manager session not found" });
 	}
 
-	// Scratch task sessions (no configurationId) can omit repo linkage.
-	// Inherit sandbox provider from the manager session so children use the same provider (e.g. E2B).
+	// Scratch task sessions (no configurationId) can omit repo linkage
 	const childSession = await sessions.createUnifiedTaskSession({
 		organizationId: ctx.organizationId,
 		createdBy: managerSession.createdBy ?? "system",
@@ -355,7 +353,6 @@ async function handleSpawnChildTask(
 		visibility: (managerSession.visibility as "private" | "shared" | "org") ?? "private",
 		initialPrompt: instructions,
 		title,
-		sandboxProvider: managerSession.sandboxProvider as "e2b" | undefined,
 	});
 
 	// Emit task_spawned run event
@@ -393,9 +390,11 @@ async function handleSpawnChildTask(
 }
 
 async function handleListChildren(ctx: ManagerToolContext, log: Logger): Promise<string> {
-	// List ALL children across all runs so the manager can interact with
-	// children from previous runs that are still running.
-	const children = await sessions.listAllChildSessions(ctx.managerSessionId, ctx.organizationId);
+	const children = await sessions.listChildSessionsByRun(
+		ctx.managerSessionId,
+		ctx.workerRunId,
+		ctx.organizationId,
+	);
 
 	const result = children.map((s) => ({
 		session_id: s.id,
@@ -405,7 +404,6 @@ async function handleListChildren(ctx: ManagerToolContext, log: Logger): Promise
 		operator_status: s.operatorStatus,
 		outcome: s.outcome,
 		summary: s.summary,
-		worker_run_id: s.workerRunId,
 	}));
 
 	log.debug({ count: result.length }, "Listed child sessions");

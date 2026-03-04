@@ -14,11 +14,3 @@ export const PAGE_TITLES: Record<string, string> = {
 	"/settings/repositories": "Repositories",
 	"/settings/tools": "Tools",
 };
-
-export function getPageTitle(pathname: string): string {
-	if (PAGE_TITLES[pathname]) return PAGE_TITLES[pathname];
-	for (const [path, title] of Object.entries(PAGE_TITLES)) {
-		if (pathname.startsWith(`${path}/`)) return title;
-	}
-	return "";
-}

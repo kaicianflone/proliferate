@@ -72,19 +72,19 @@ export default function AutomationRunsPage({
 
 				<div className="mb-4 flex flex-wrap gap-1">
 					{RUN_STATUS_FILTERS.map((filter) => (
-						<button
+						<Button
 							key={filter.value}
-							type="button"
+							variant="ghost"
 							onClick={() => setStatusFilter(filter.value)}
 							className={cn(
-								"rounded-md px-2.5 py-1 text-xs font-medium transition-colors",
+								"rounded-md px-2.5 py-1 h-auto text-xs font-medium transition-colors",
 								statusFilter === filter.value
 									? "bg-secondary text-foreground"
 									: "text-muted-foreground hover:bg-muted/60 hover:text-foreground",
 							)}
 						>
 							{filter.label}
-						</button>
+						</Button>
 					))}
 				</div>
 

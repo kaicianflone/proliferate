@@ -1,3 +1,5 @@
+"use client";
+
 import type { ModelId, ReasoningEffort } from "@proliferate/shared";
 import { modelSupportsReasoning } from "@proliferate/shared/agents";
 import { create } from "zustand";

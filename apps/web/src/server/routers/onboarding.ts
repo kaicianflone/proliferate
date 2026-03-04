@@ -225,7 +225,7 @@ export const onboardingRouter = {
 			} catch (err) {
 				log.error({ err }, "Failed to finalize onboarding");
 				throw new ORPCError("INTERNAL_SERVER_ERROR", {
-					message: err instanceof Error ? err.message : "Failed to finalize onboarding",
+					message: "Failed to finalize onboarding",
 				});
 			}
 		}),

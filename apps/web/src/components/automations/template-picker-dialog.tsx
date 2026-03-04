@@ -160,10 +160,11 @@ export function TemplatePickerDialog({
 					<nav className="w-[240px] py-4 px-3 overflow-y-auto border-r border-border/50 shrink-0">
 						<ul className="space-y-1">
 							<li>
-								<button
+								<Button
 									type="button"
+									variant="ghost"
 									className={cn(
-										"w-full text-left px-2 py-1.5 rounded-lg text-sm font-medium transition-colors",
+										"w-full text-left px-2 py-1.5 rounded-lg text-sm font-medium h-auto justify-start",
 										selectedCategory === "all"
 											? "bg-muted text-foreground"
 											: "text-muted-foreground hover:bg-muted/50",
@@ -171,14 +172,15 @@ export function TemplatePickerDialog({
 									onClick={() => setSelectedCategory("all")}
 								>
 									All templates
-								</button>
+								</Button>
 							</li>
 							{availableCategories.map((cat) => (
 								<li key={cat}>
-									<button
+									<Button
 										type="button"
+										variant="ghost"
 										className={cn(
-											"w-full text-left px-2 py-1.5 rounded-lg text-sm font-medium transition-colors",
+											"w-full text-left px-2 py-1.5 rounded-lg text-sm font-medium h-auto justify-start",
 											selectedCategory === cat
 												? "bg-muted text-foreground"
 												: "text-muted-foreground hover:bg-muted/50",
@@ -186,7 +188,7 @@ export function TemplatePickerDialog({
 										onClick={() => setSelectedCategory(cat)}
 									>
 										{CATEGORY_LABELS[cat]}
-									</button>
+									</Button>
 								</li>
 							))}
 						</ul>
@@ -210,10 +212,11 @@ export function TemplatePickerDialog({
 						<div className="flex-1 overflow-y-auto px-4 pb-5">
 							<div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
 								{/* Blank automation card — always first */}
-								<button
+								<Button
 									type="button"
+									variant="outline"
 									disabled={isPending}
-									className="flex flex-col items-start p-4 pb-3 rounded-xl border border-dashed border-border bg-card hover:border-foreground/20 transition-colors text-left disabled:opacity-50"
+									className="flex flex-col items-start p-4 pb-3 rounded-xl border-dashed border-border bg-card hover:border-foreground/20 text-left disabled:opacity-50 h-auto"
 									onClick={onSelectBlank}
 								>
 									<div className="w-8 h-8 rounded-lg border border-border bg-background flex items-center justify-center shrink-0">
@@ -225,7 +228,7 @@ export function TemplatePickerDialog({
 											Start from scratch with an empty configuration.
 										</p>
 									</div>
-								</button>
+								</Button>
 
 								{/* Template cards */}
 								{filteredTemplates.map((template) => {
@@ -233,11 +236,12 @@ export function TemplatePickerDialog({
 									const Icon = ICON_MAP[template.icon] ?? Bug;
 
 									return (
-										<button
+										<Button
 											key={template.id}
 											type="button"
+											variant="outline"
 											disabled={isPending}
-											className="flex flex-col items-start p-4 pb-3 rounded-xl border border-border bg-card hover:border-foreground/20 transition-colors text-left disabled:opacity-50"
+											className="flex flex-col items-start p-4 pb-3 rounded-xl border-border bg-card hover:border-foreground/20 text-left disabled:opacity-50 h-auto"
 											onClick={() => onSelectTemplate(template)}
 										>
 											<div className="w-8 h-8 rounded-lg border border-border bg-background flex items-center justify-center p-1 shrink-0">
@@ -306,7 +310,7 @@ export function TemplatePickerDialog({
 													</p>
 												)}
 											</div>
-										</button>
+										</Button>
 									);
 								})}
 							</div>

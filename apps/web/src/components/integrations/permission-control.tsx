@@ -1,5 +1,6 @@
 "use client";
 
+import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { cn } from "@/lib/display/utils";
 
@@ -39,12 +40,14 @@ export function PermissionControl({ value, onChange, disabled }: PermissionContr
 				{MODES.map((mode) => (
 					<Tooltip key={mode.value}>
 						<TooltipTrigger asChild>
-							<button
+							<Button
 								type="button"
+								variant="ghost"
+								size="sm"
 								disabled={disabled}
 								onClick={() => onChange(mode.value)}
 								className={cn(
-									"px-2 py-1 text-xs font-medium rounded-sm transition-colors flex items-center gap-1.5",
+									"px-2 py-1 text-xs font-medium rounded-sm flex items-center gap-1.5 h-auto",
 									value === mode.value
 										? "bg-background text-foreground shadow-sm"
 										: "text-muted-foreground hover:text-foreground",
@@ -58,7 +61,7 @@ export function PermissionControl({ value, onChange, disabled }: PermissionContr
 									)}
 								/>
 								{mode.label}
-							</button>
+							</Button>
 						</TooltipTrigger>
 						<TooltipContent side="top" className="max-w-[200px]">
 							<p className="text-xs">{mode.tooltip}</p>

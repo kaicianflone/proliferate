@@ -6,21 +6,17 @@ import {
 	QuestionBadge,
 } from "@/components/dashboard/page-empty-state";
 import { PageShell } from "@/components/dashboard/page-shell";
+import { CardMenu } from "@/components/integrations/card-menu";
 import { ConnectorForm } from "@/components/integrations/connector-form";
 import { ConnectorIcon } from "@/components/integrations/connector-icon";
 import { findPresetKey } from "@/components/integrations/connector-icon";
+import { ConnectorMenu } from "@/components/integrations/connector-menu";
 import { IntegrationDetailDialog } from "@/components/integrations/integration-detail-dialog";
 import {
-	CATEGORY_LABELS,
 	type CatalogEntry,
 	IntegrationPickerDialog,
 } from "@/components/integrations/integration-picker-dialog";
-import {
-	type Provider,
-	ProviderIcon,
-	getProviderDisplayName,
-	getProviderManageUrl,
-} from "@/components/integrations/provider-icon";
+import { type Provider, ProviderIcon } from "@/components/integrations/provider-icon";
 import {
 	AlertDialog,
 	AlertDialogAction,
@@ -32,13 +28,6 @@ import {
 	AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
-import {
-	DropdownMenu,
-	DropdownMenuContent,
-	DropdownMenuItem,
-	DropdownMenuSeparator,
-	DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
 import {
@@ -74,17 +63,7 @@ import { orpc } from "@/lib/infra/orpc";
 import { CONNECTOR_PRESETS, type ConnectorConfig } from "@proliferate/shared";
 import type { IntegrationWithCreator } from "@proliferate/shared/contracts/integrations";
 import { useQueryClient } from "@tanstack/react-query";
-import {
-	CheckCircle2,
-	ExternalLink,
-	MoreHorizontal,
-	Pencil,
-	Plus,
-	RefreshCw,
-	Search,
-	Trash2,
-	X,
-} from "lucide-react";
+import { CheckCircle2, Plus, Search } from "lucide-react";
 import { useCallback, useMemo, useState } from "react";
 
 // ====================================================================
@@ -644,10 +623,10 @@ export default function IntegrationsPage() {
 			{isAdmin && CORE_ENTRIES.filter((e) => !getConnectionStatus(e)).length > 0 && (
 				<div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3 mb-6">
 					{CORE_ENTRIES.filter((e) => !getConnectionStatus(e)).map((entry) => (
-						<button
+						<Button
 							key={entry.key}
-							type="button"
-							className="flex flex-col items-start p-4 pb-3 rounded-2xl border border-border bg-card hover:border-foreground/20 transition-colors text-left"
+							variant="ghost"
+							className="flex flex-col items-start p-4 pb-3 h-auto rounded-2xl border border-border bg-card hover:border-foreground/20 transition-colors text-left"
 							onClick={() => {
 								setSelectedEntry(entry);
 								setOpenedFromPicker(false);
@@ -662,7 +641,7 @@ export default function IntegrationsPage() {
 									{CORE_PLATFORM_NOTES[entry.key] ?? entry.description}
 								</p>
 							</div>
-						</button>
+						</Button>
 					))}
 				</div>
 			)}
@@ -901,14 +880,14 @@ export default function IntegrationsPage() {
 							</div>
 						</div>
 					) : (
-						<button
-							type="button"
-							className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors"
+						<Button
+							variant="ghost"
+							className="flex items-center gap-1.5 h-auto p-0 text-xs text-muted-foreground hover:text-foreground transition-colors"
 							onClick={() => setShowSlackConnectForm(true)}
 						>
 							<Plus className="h-3 w-3" />
 							Add Support Channel
-						</button>
+						</Button>
 					)}
 				</div>
 			)}
@@ -1011,115 +990,5 @@ export default function IntegrationsPage() {
 				onUpdateSlackConfig={(input) => updateSlackConfig.mutate(input)}
 			/>
 		</PageShell>
-	);
-}
-
-// ====================================================================
-// Card dropdown menu
-// ====================================================================
-
-function CardMenu({
-	entry,
-	isLoading,
-	onReconnect,
-	onDisconnect,
-}: {
-	entry: CatalogEntry;
-	isLoading: boolean;
-	onReconnect: () => void;
-	onDisconnect: () => void;
-}) {
-	const manageUrl = entry.provider ? getProviderManageUrl(entry.provider) : null;
-
-	return (
-		<DropdownMenu>
-			<DropdownMenuTrigger asChild>
-				<Button variant="ghost" size="icon" className="h-7 w-7 text-muted-foreground">
-					<MoreHorizontal className="h-4 w-4" />
-				</Button>
-			</DropdownMenuTrigger>
-			<DropdownMenuContent align="end">
-				{/* Manage on provider */}
-				{manageUrl && (
-					<DropdownMenuItem asChild>
-						<a
-							href={manageUrl}
-							target="_blank"
-							rel="noopener noreferrer"
-							className="flex items-center gap-2"
-						>
-							<ExternalLink className="h-3.5 w-3.5" />
-							Manage on {getProviderDisplayName(entry.provider!)}
-						</a>
-					</DropdownMenuItem>
-				)}
-
-				{/* Reconnect (OAuth / Slack) */}
-				{(entry.type === "oauth" || entry.type === "slack") && (
-					<DropdownMenuItem
-						onClick={onReconnect}
-						disabled={isLoading}
-						className="flex items-center gap-2"
-					>
-						<RefreshCw className="h-3.5 w-3.5" />
-						Reconnect
-					</DropdownMenuItem>
-				)}
-
-				<DropdownMenuSeparator />
-
-				{/* Disconnect */}
-				<DropdownMenuItem
-					onClick={onDisconnect}
-					className="flex items-center gap-2 text-destructive focus:text-destructive"
-				>
-					<X className="h-3.5 w-3.5" />
-					Disconnect
-				</DropdownMenuItem>
-			</DropdownMenuContent>
-		</DropdownMenu>
-	);
-}
-
-// ====================================================================
-// Connector dropdown menu (admin: edit / toggle / delete)
-// ====================================================================
-
-function ConnectorMenu({
-	connector,
-	onEdit,
-	onToggle,
-	onDelete,
-}: {
-	connector: ConnectorConfig;
-	onEdit: () => void;
-	onToggle: () => void;
-	onDelete: () => void;
-}) {
-	return (
-		<DropdownMenu>
-			<DropdownMenuTrigger asChild>
-				<Button variant="ghost" size="icon" className="h-7 w-7 text-muted-foreground">
-					<MoreHorizontal className="h-4 w-4" />
-				</Button>
-			</DropdownMenuTrigger>
-			<DropdownMenuContent align="end">
-				<DropdownMenuItem onClick={onEdit} className="flex items-center gap-2">
-					<Pencil className="h-3.5 w-3.5" />
-					Edit
-				</DropdownMenuItem>
-				<DropdownMenuItem onClick={onToggle} className="flex items-center gap-2">
-					{connector.enabled ? "Disable" : "Enable"}
-				</DropdownMenuItem>
-				<DropdownMenuSeparator />
-				<DropdownMenuItem
-					onClick={onDelete}
-					className="flex items-center gap-2 text-destructive focus:text-destructive"
-				>
-					<Trash2 className="h-3.5 w-3.5" />
-					Delete
-				</DropdownMenuItem>
-			</DropdownMenuContent>
-		</DropdownMenu>
 	);
 }

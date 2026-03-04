@@ -5,6 +5,7 @@ import { WorkerDetailHeader } from "@/components/automations/worker-detail-heade
 import { WorkerFailureBanner } from "@/components/automations/worker-failure-banner";
 import { WorkerSessionsTab } from "@/components/automations/worker-sessions-tab";
 import { WorkerSettingsTab } from "@/components/automations/worker-settings-tab";
+import { Button } from "@/components/ui/button";
 import { PageBackLink } from "@/components/ui/page-back-link";
 import { DETAIL_TABS, type DetailTab } from "@/config/coworkers";
 import { useWorkerActions } from "@/hooks/automations/use-worker-actions";
@@ -89,19 +90,19 @@ export default function CoworkerDetailPage({
 				{/* Tabs */}
 				<div className="flex items-center gap-1 mb-6 border-b border-border/50 pb-3">
 					{DETAIL_TABS.map((tab) => (
-						<button
+						<Button
 							key={tab.value}
-							type="button"
+							variant="ghost"
 							onClick={() => setActiveTab(tab.value)}
 							className={cn(
-								"px-3 py-1.5 text-sm font-medium rounded-md transition-colors",
+								"px-3 py-1.5 h-auto text-sm font-medium rounded-md transition-colors",
 								activeTab === tab.value
 									? "bg-muted text-foreground"
 									: "text-muted-foreground hover:text-foreground hover:bg-muted/50",
 							)}
 						>
 							{tab.label}
-						</button>
+						</Button>
 					))}
 				</div>
 

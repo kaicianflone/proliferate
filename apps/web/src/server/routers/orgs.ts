@@ -122,7 +122,7 @@ export const orgsRouter = {
 				await orgs.setActionMode(context.orgId, context.user.id, input.key, input.mode);
 				return { success: true };
 			} catch (err) {
-				if (err instanceof Error && err.message.includes("Only admins")) {
+				if (err instanceof orgs.ActionModePermissionError) {
 					throw new ORPCError("FORBIDDEN", { message: err.message });
 				}
 				throw err;

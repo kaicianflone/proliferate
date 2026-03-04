@@ -1,15 +1,15 @@
 "use client";
 
 import { PageShell } from "@/components/dashboard/page-shell";
+import { ActionError } from "@/components/settings/members/action-error";
+import { InviteForm } from "@/components/settings/members/invite-form";
 import {
-	ActionError,
 	CancelInvitationDialog,
-	InviteForm,
-	MembersList,
-	PendingInvitations,
 	RemoveMemberDialog,
-	useMembersPage,
-} from "@/components/settings/members";
+} from "@/components/settings/members/member-dialogs";
+import { MembersList } from "@/components/settings/members/members-list";
+import { PendingInvitations } from "@/components/settings/members/pending-invitations";
+import { useMembersPage } from "@/components/settings/members/use-members-page";
 
 export default function MembersPage() {
 	const {

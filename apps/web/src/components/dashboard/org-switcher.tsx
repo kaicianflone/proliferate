@@ -1,5 +1,6 @@
 "use client";
 
+import { Button } from "@/components/ui/button";
 import {
 	DropdownMenu,
 	DropdownMenuContent,
@@ -48,10 +49,11 @@ export function OrgSwitcher() {
 	return (
 		<DropdownMenu>
 			<DropdownMenuTrigger asChild>
-				<button
+				<Button
 					type="button"
+					variant="outline"
 					disabled={isSwitchingOrg}
-					className="flex h-9 w-full items-center gap-2 rounded-xl bg-card px-2 ring-1 ring-inset ring-border shadow-subtle transition-colors hover:bg-accent"
+					className="flex h-9 w-full items-center gap-2 rounded-xl bg-card px-2 ring-1 ring-inset ring-border shadow-subtle hover:bg-accent justify-start"
 				>
 					<div className="flex h-5 w-5 shrink-0 items-center justify-center rounded bg-primary/10 text-primary">
 						<span className="text-xs font-bold">{orgInitial}</span>
@@ -60,7 +62,7 @@ export function OrgSwitcher() {
 						{effectiveActiveOrg?.name || "Workspace"}
 					</p>
 					<ChevronsUpDown className="mr-0.5 h-4 w-4 shrink-0 text-muted-foreground" />
-				</button>
+				</Button>
 			</DropdownMenuTrigger>
 			<DropdownMenuContent align="start" className="w-64" sideOffset={4}>
 				<DropdownMenuLabel className="text-xs font-normal text-muted-foreground">

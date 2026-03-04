@@ -7,4 +7,5 @@ export * from "./org-pause";
 export * from "./outbox";
 export * from "./snapshot-limits";
 export * from "./shadow-balance";
+export * from "./service";
 export * from "./trial-activation";

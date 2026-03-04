@@ -46,74 +46,81 @@ export function SidebarOrganizeMenu() {
 				<div className="flex flex-col">
 					{/* Section: Organize */}
 					<div className="px-3 py-1.5 text-xs font-medium text-muted-foreground">Organize</div>
-					<button
+					<Button
 						type="button"
-						className="flex items-center gap-2 px-3 py-1.5 text-sm rounded-md hover:bg-muted transition-colors text-left"
+						variant="ghost"
+						className="flex items-center gap-2 px-3 py-1.5 text-sm rounded-md hover:bg-muted h-auto justify-start text-left w-full"
 						onClick={() => setSidebarOrganize("by-project")}
 					>
 						<CheckIcon active={sidebarOrganize === "by-project"} />
 						By project
-					</button>
-					<button
+					</Button>
+					<Button
 						type="button"
-						className="flex items-center gap-2 px-3 py-1.5 text-sm rounded-md hover:bg-muted transition-colors text-left"
+						variant="ghost"
+						className="flex items-center gap-2 px-3 py-1.5 text-sm rounded-md hover:bg-muted h-auto justify-start text-left w-full"
 						onClick={() => setSidebarOrganize("chronological")}
 					>
 						<CheckIcon active={sidebarOrganize === "chronological"} />
 						Chronological
-					</button>
+					</Button>
 
 					{/* Divider */}
 					<div className="my-1 h-px bg-border" />
 
 					{/* Section: Sort by */}
 					<div className="px-3 py-1.5 text-xs font-medium text-muted-foreground">Sort by</div>
-					<button
+					<Button
 						type="button"
-						className="flex items-center gap-2 px-3 py-1.5 text-sm rounded-md hover:bg-muted transition-colors text-left"
+						variant="ghost"
+						className="flex items-center gap-2 px-3 py-1.5 text-sm rounded-md hover:bg-muted h-auto justify-start text-left w-full"
 						onClick={() => setSidebarSort("updated")}
 					>
 						<CheckIcon active={sidebarSort === "updated"} />
 						Updated
-					</button>
-					<button
+					</Button>
+					<Button
 						type="button"
-						className="flex items-center gap-2 px-3 py-1.5 text-sm rounded-md hover:bg-muted transition-colors text-left"
+						variant="ghost"
+						className="flex items-center gap-2 px-3 py-1.5 text-sm rounded-md hover:bg-muted h-auto justify-start text-left w-full"
 						onClick={() => setSidebarSort("created")}
 					>
 						<CheckIcon active={sidebarSort === "created"} />
 						Created
-					</button>
+					</Button>
 
 					{/* Divider */}
 					<div className="my-1 h-px bg-border" />
 
 					{/* Section: Show */}
 					<div className="px-3 py-1.5 text-xs font-medium text-muted-foreground">Show</div>
-					<button
+					<Button
 						type="button"
-						className="flex items-center gap-2 px-3 py-1.5 text-sm rounded-md hover:bg-muted transition-colors text-left"
+						variant="ghost"
+						className="flex items-center gap-2 px-3 py-1.5 text-sm rounded-md hover:bg-muted h-auto justify-start text-left w-full"
 						onClick={() => setSidebarStatusFilter("all")}
 					>
 						<CheckIcon active={sidebarStatusFilter === "all"} />
 						All sessions
-					</button>
-					<button
+					</Button>
+					<Button
 						type="button"
-						className="flex items-center gap-2 px-3 py-1.5 text-sm rounded-md hover:bg-muted transition-colors text-left"
+						variant="ghost"
+						className="flex items-center gap-2 px-3 py-1.5 text-sm rounded-md hover:bg-muted h-auto justify-start text-left w-full"
 						onClick={() => setSidebarStatusFilter("running")}
 					>
 						<CheckIcon active={sidebarStatusFilter === "running"} />
 						Running
-					</button>
-					<button
+					</Button>
+					<Button
 						type="button"
-						className="flex items-center gap-2 px-3 py-1.5 text-sm rounded-md hover:bg-muted transition-colors text-left"
+						variant="ghost"
+						className="flex items-center gap-2 px-3 py-1.5 text-sm rounded-md hover:bg-muted h-auto justify-start text-left w-full"
 						onClick={() => setSidebarStatusFilter("paused")}
 					>
 						<CheckIcon active={sidebarStatusFilter === "paused"} />
 						Paused
-					</button>
+					</Button>
 				</div>
 			</PopoverContent>
 		</Popover>

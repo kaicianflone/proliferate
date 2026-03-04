@@ -1,5 +1,6 @@
 "use client";
 
+import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/display/utils";
 import { Bug, Clock, GitPullRequest, Plus } from "lucide-react";
 import type { ComponentType } from "react";
@@ -56,14 +57,15 @@ export function RecipeCards({ onSelect, disabled }: RecipeCardsProps) {
 			{RECIPES.map((recipe) => {
 				const { Icon, ...recipeData } = recipe;
 				return (
-					<button
+					<Button
 						key={recipe.name}
 						type="button"
+						variant="outline"
 						disabled={disabled}
 						onClick={() => onSelect(recipeData)}
 						className={cn(
-							"group flex flex-col items-start gap-3 p-5 rounded-lg border border-border bg-card text-left",
-							"hover:border-primary/50 hover:bg-muted/30 transition-colors",
+							"group flex flex-col items-start gap-3 p-5 rounded-lg border-border bg-card text-left h-auto",
+							"hover:border-primary/50 hover:bg-muted/30",
 							"disabled:opacity-50 disabled:cursor-not-allowed",
 						)}
 					>
@@ -76,7 +78,7 @@ export function RecipeCards({ onSelect, disabled }: RecipeCardsProps) {
 							</h3>
 							<p className="text-sm text-muted-foreground mt-1">{recipe.description}</p>
 						</div>
-					</button>
+					</Button>
 				);
 			})}
 		</div>

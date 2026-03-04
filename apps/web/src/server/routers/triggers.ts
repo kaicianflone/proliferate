@@ -217,7 +217,7 @@ export const triggersRouter = {
 				}
 				return result;
 			} catch (error) {
-				if (error instanceof Error && error.message.startsWith("Event is already")) {
+				if (error instanceof triggers.TriggerEventNotQueueableError) {
 					throw new ORPCError("BAD_REQUEST", { message: error.message });
 				}
 				throw error;

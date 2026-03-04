@@ -9,6 +9,7 @@ import {
 	SelectTrigger,
 	SelectValue,
 } from "@/components/ui/select";
+import { OVERAGE_CAP_OPTIONS } from "@/config/billing";
 import type { BillingInfo } from "@/types/billing";
 import { AlertTriangle, Pause, Play } from "lucide-react";
 import { useState } from "react";
@@ -18,14 +19,6 @@ interface OverageSectionProps {
 	overage: BillingInfo["overage"];
 	onUpdate?: (settings: Partial<BillingInfo["billingSettings"]>) => Promise<void>;
 }
-
-const OVERAGE_CAP_OPTIONS = [
-	{ value: "5000", label: "$50" },
-	{ value: "10000", label: "$100" },
-	{ value: "20000", label: "$200" },
-	{ value: "50000", label: "$500" },
-	{ value: "unlimited", label: "Unlimited" },
-];
 
 function formatCurrency(cents: number): string {
 	return (cents / 100).toLocaleString("en-US", {

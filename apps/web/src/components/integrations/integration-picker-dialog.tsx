@@ -109,10 +109,11 @@ export function IntegrationPickerDialog({
 					<nav className="w-[240px] py-4 px-3 overflow-y-auto border-r border-border/50 shrink-0">
 						<ul className="space-y-1">
 							<li>
-								<button
+								<Button
 									type="button"
+									variant="ghost"
 									className={cn(
-										"w-full text-left px-2 py-1.5 rounded-lg text-sm font-medium transition-colors",
+										"w-full text-left px-2 py-1.5 rounded-lg text-sm font-medium h-auto justify-start",
 										selectedCategory === "all"
 											? "bg-muted text-foreground"
 											: "text-muted-foreground hover:bg-muted/50",
@@ -120,14 +121,15 @@ export function IntegrationPickerDialog({
 									onClick={() => setSelectedCategory("all")}
 								>
 									All integrations
-								</button>
+								</Button>
 							</li>
 							{availableCategories.map((cat) => (
 								<li key={cat}>
-									<button
+									<Button
 										type="button"
+										variant="ghost"
 										className={cn(
-											"w-full text-left px-2 py-1.5 rounded-lg text-sm font-medium transition-colors",
+											"w-full text-left px-2 py-1.5 rounded-lg text-sm font-medium h-auto justify-start",
 											selectedCategory === cat
 												? "bg-muted text-foreground"
 												: "text-muted-foreground hover:bg-muted/50",
@@ -135,7 +137,7 @@ export function IntegrationPickerDialog({
 										onClick={() => setSelectedCategory(cat)}
 									>
 										{CATEGORY_LABELS[cat]}
-									</button>
+									</Button>
 								</li>
 							))}
 						</ul>
@@ -165,10 +167,11 @@ export function IntegrationPickerDialog({
 									{filteredEntries.map((entry) => {
 										const isConnected = getConnectionStatus(entry);
 										return (
-											<button
+											<Button
 												key={entry.key}
 												type="button"
-												className="flex flex-col items-start p-4 pb-3 rounded-xl border border-border bg-card hover:border-foreground/20 transition-colors text-left"
+												variant="outline"
+												className="flex flex-col items-start p-4 pb-3 rounded-xl border-border bg-card hover:border-foreground/20 text-left h-auto"
 												onClick={() => onSelectEntry(entry)}
 											>
 												<div className="relative">
@@ -193,7 +196,7 @@ export function IntegrationPickerDialog({
 														{entry.description}
 													</p>
 												</div>
-											</button>
+											</Button>
 										);
 									})}
 								</div>

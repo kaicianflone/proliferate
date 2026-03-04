@@ -182,13 +182,14 @@ export function RunRow({
 
 	return (
 		<div className="border-b border-border/60 last:border-b-0">
-			<button
+			<Button
 				type="button"
+				variant="ghost"
 				onClick={onToggle}
 				aria-expanded={isExpanded}
 				aria-controls={`run-${run.id}-details`}
 				className={cn(
-					"w-full px-4 py-3 text-left transition-colors hover:bg-muted/40",
+					"w-full px-4 py-3 text-left hover:bg-muted/40 h-auto justify-start rounded-none",
 					isExpanded && "bg-muted/30",
 				)}
 			>
@@ -232,7 +233,7 @@ export function RunRow({
 						/>
 					</div>
 				</div>
-			</button>
+			</Button>
 
 			{isExpanded && (
 				<div id={`run-${run.id}-details`}>

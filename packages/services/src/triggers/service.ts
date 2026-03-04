@@ -145,6 +145,13 @@ export interface SkipEventResult {
 	eventId: string;
 }
 
+export class TriggerEventNotQueueableError extends Error {
+	constructor(status: string) {
+		super(`Event is already ${status}`);
+		this.name = "TriggerEventNotQueueableError";
+	}
+}
+
 // ============================================
 // Service functions
 // ============================================
@@ -436,7 +443,7 @@ export async function skipTriggerEvent(id: string, orgId: string): Promise<SkipE
 	if (!event) return null;
 
 	if (event.status !== "queued") {
-		throw new Error(`Event is already ${event.status}`);
+		throw new TriggerEventNotQueueableError(event.status ?? "unknown");
 	}
 
 	await triggersDb.skipEvent(id);

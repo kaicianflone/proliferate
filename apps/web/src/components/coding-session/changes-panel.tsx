@@ -1,5 +1,6 @@
 "use client";
 
+import { Button } from "@/components/ui/button";
 import {
 	Select,
 	SelectContent,
@@ -190,10 +191,11 @@ export function ChangesContent({ sessionId, activityTick }: ChangesContentProps)
 						{files.map((file) => {
 							const { label, color } = statusLabel(file.status);
 							return (
-								<button
+								<Button
 									key={file.path}
 									type="button"
-									className="flex items-center gap-2 w-full px-3 py-1.5 text-left hover:bg-muted/50 transition-colors"
+									variant="ghost"
+									className="flex items-center gap-2 w-full px-3 py-1.5 text-left hover:bg-muted/50 h-auto justify-start rounded-none"
 									onClick={() => handleFileClick(file.path)}
 								>
 									<span className={cn("text-xs font-mono w-4 shrink-0 text-center", color)}>
@@ -201,7 +203,7 @@ export function ChangesContent({ sessionId, activityTick }: ChangesContentProps)
 									</span>
 									<FileCode className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
 									<span className="text-sm truncate text-foreground">{file.path}</span>
-								</button>
+								</Button>
 							);
 						})}
 					</div>

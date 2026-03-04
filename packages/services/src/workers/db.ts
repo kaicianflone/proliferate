@@ -651,12 +651,12 @@ export async function listEventsByRun(workerRunId: string): Promise<WorkerRunEve
 // Workers — Aggregate Queries (Coworker UI)
 // ============================================
 
-export type WorkerWithCounts = WorkerRow & {
+export type WorkerRowWithCounts = WorkerRow & {
 	activeTaskCount: number;
 	pendingApprovalCount: number;
 };
 
-export async function listWorkersByOrgWithCounts(orgId: string): Promise<WorkerWithCounts[]> {
+export async function listWorkersByOrgWithCounts(orgId: string): Promise<WorkerRowWithCounts[]> {
 	const db = getDb();
 	const rows = await db
 		.select({

@@ -80,48 +80,18 @@ interface TriggerConfigFormProps {
 	integrations?: Integration[];
 }
 
-// --- Constants ---
+// --- Constants (imported from config) ---
 
-const LINEAR_PRIORITIES = [
-	{ value: 1, label: "Urgent" },
-	{ value: 2, label: "High" },
-	{ value: 3, label: "Medium" },
-	{ value: 4, label: "Low" },
-];
-
-const GITHUB_EVENT_TYPES = [
-	{ value: "issues" as const, label: "Issues" },
-	{ value: "pull_request" as const, label: "Pull Requests" },
-	{ value: "push" as const, label: "Push" },
-	{ value: "check_run" as const, label: "Check Run" },
-	{ value: "check_suite" as const, label: "Check Suite" },
-	{ value: "workflow_run" as const, label: "Workflow Run" },
-];
-
-const GITHUB_ISSUE_ACTIONS = [
-	{ value: "opened", label: "Opened" },
-	{ value: "closed", label: "Closed" },
-	{ value: "labeled", label: "Labeled" },
-	{ value: "assigned", label: "Assigned" },
-];
-
-const GITHUB_PR_ACTIONS = [
-	{ value: "opened", label: "Opened" },
-	{ value: "closed", label: "Closed" },
-	{ value: "merged", label: "Merged" },
-	{ value: "ready_for_review", label: "Ready for Review" },
-];
-
-const GITHUB_CONCLUSIONS = [
-	{ value: "failure" as const, label: "Failure" },
-	{ value: "success" as const, label: "Success" },
-	{ value: "cancelled" as const, label: "Cancelled" },
-	{ value: "timed_out" as const, label: "Timed Out" },
-];
-
-const integrationProviders: Provider[] = ["github", "linear", "sentry"];
-const standaloneProviders: Provider[] = ["posthog", "webhook", "scheduled"];
-const allProvidersList: Provider[] = [...integrationProviders, ...standaloneProviders];
+import {
+	ALL_PROVIDERS_LIST,
+	GITHUB_CONCLUSIONS,
+	GITHUB_EVENT_TYPES,
+	GITHUB_ISSUE_ACTIONS,
+	GITHUB_PR_ACTIONS,
+	INTEGRATION_PROVIDERS,
+	LINEAR_PRIORITIES,
+	STANDALONE_PROVIDERS,
+} from "@/config/triggers";
 
 // --- Sub-components ---
 
@@ -143,16 +113,17 @@ function ProviderSelector({
 			<Label className="text-xs text-muted-foreground">Trigger type</Label>
 			<div className="flex flex-col rounded-lg border border-border/60 overflow-hidden divide-y divide-border/40">
 				{allProviders.map((p) => {
-					const needsConnection = integrationProviders.includes(p);
+					const needsConnection = INTEGRATION_PROVIDERS.includes(p);
 					const isDisabled = needsConnection && !connectedProviders.has(p);
 					const isSelected = provider === p;
 					return (
-						<button
+						<Button
 							key={p}
 							type="button"
+							variant="ghost"
 							disabled={isDisabled}
 							onClick={() => onSelect(p)}
-							className={`flex items-center gap-2.5 px-3 py-2 text-left text-sm transition-colors ${
+							className={`flex items-center gap-2.5 px-3 py-2 text-left text-sm transition-colors rounded-none h-auto justify-start ${
 								isSelected
 									? "bg-muted/50 font-medium"
 									: isDisabled
@@ -167,7 +138,7 @@ function ProviderSelector({
 							)}
 							<span className="flex-1">{getProviderDisplayName(p)}</span>
 							{isDisabled && <span className="text-xs text-muted-foreground">Not connected</span>}
-						</button>
+						</Button>
 					);
 				})}
 			</div>
@@ -649,14 +620,14 @@ export function TriggerConfigForm({
 	// Determine available providers from trigger service
 	const { data: triggerProvidersData } = useTriggerProviders();
 	const allProviders = (() => {
-		if (!triggerProvidersData?.providers) return allProvidersList;
+		if (!triggerProvidersData?.providers) return ALL_PROVIDERS_LIST;
 		const available = new Set<Provider>();
 		for (const entry of Object.values(triggerProvidersData.providers)) {
 			available.add(entry.provider as Provider);
 		}
 		// Always include standalone providers
-		for (const p of standaloneProviders) available.add(p);
-		return allProvidersList.filter((p) => available.has(p));
+		for (const p of STANDALONE_PROVIDERS) available.add(p);
+		return ALL_PROVIDERS_LIST.filter((p) => available.has(p));
 	})();
 
 	// Auto-select integration when provider changes and org has exactly one
@@ -672,7 +643,7 @@ export function TriggerConfigForm({
 		? integrations.filter((i) => i.integration_id === provider && i.status === "active")
 		: [];
 	const showConnectionSelector =
-		provider && integrationProviders.includes(provider) && matchingIntegrations.length > 1;
+		provider && INTEGRATION_PROVIDERS.includes(provider) && matchingIntegrations.length > 1;
 
 	// Auto-select on mount if editing an existing trigger with a known integration
 	useEffect(() => {

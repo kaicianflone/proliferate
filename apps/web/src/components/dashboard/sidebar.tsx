@@ -1,6 +1,6 @@
 "use client";
 
-import { openIntercomMessenger } from "@/components/providers";
+import { openIntercomMessenger } from "@/components/providers/intercom";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { AutomationsIcon, SidebarCollapseIcon, SidebarExpandIcon } from "@/components/ui/icons";
@@ -217,11 +217,12 @@ export function NavItem({
 	onClick: () => void;
 }) {
 	return (
-		<button
+		<Button
 			type="button"
+			variant="ghost"
 			onClick={onClick}
 			className={cn(
-				"flex items-center gap-2 w-full px-2 h-8 rounded-xl text-sm font-medium transition-colors",
+				"flex items-center gap-2 w-full px-2 h-8 rounded-xl text-sm font-medium justify-start",
 				active
 					? "bg-foreground/[0.05] text-foreground"
 					: "text-muted-foreground hover:text-foreground hover:bg-foreground/[0.03]",
@@ -234,7 +235,7 @@ export function NavItem({
 					{badge > 99 ? "99+" : badge}
 				</span>
 			)}
-		</button>
+		</Button>
 	);
 }
 
@@ -337,9 +338,10 @@ export function SidebarShell({
 			{/* Footer */}
 			<div className="border-t border-sidebar-border px-3 py-3 flex flex-col gap-2">
 				{/* Support - Intercom if available, docs fallback */}
-				<button
+				<Button
 					type="button"
-					className="flex items-center justify-center gap-2 w-full h-8 rounded-lg text-sm font-medium border border-border/60 bg-muted/30 text-muted-foreground hover:text-foreground hover:bg-muted hover:border-border transition-colors"
+					variant="outline"
+					className="flex items-center justify-center gap-2 w-full h-8 rounded-lg text-sm font-medium border-border/60 bg-muted/30 text-muted-foreground hover:text-foreground hover:bg-muted hover:border-border"
 					onClick={() => {
 						if (!openIntercomMessenger()) {
 							window.open("https://docs.proliferate.com", "_blank", "noopener,noreferrer");
@@ -348,14 +350,15 @@ export function SidebarShell({
 				>
 					<LifeBuoy className="h-4 w-4" />
 					<span>Support</span>
-				</button>
+				</Button>
 
 				{/* User card */}
 				<Popover open={userMenuOpen} onOpenChange={setUserMenuOpen}>
 					<PopoverTrigger asChild>
-						<button
+						<Button
 							type="button"
-							className="flex items-center gap-3 w-full p-2 rounded-xl bg-muted/30 hover:bg-muted transition-all text-left"
+							variant="ghost"
+							className="flex items-center gap-3 w-full p-2 h-auto rounded-xl bg-muted/30 hover:bg-muted text-left justify-start"
 						>
 							<Avatar className="h-7 w-7">
 								<AvatarImage src={user?.image || undefined} alt={user?.name || "User"} />
@@ -369,13 +372,14 @@ export function SidebarShell({
 									{user?.email || ""}
 								</Text>
 							</div>
-						</button>
+						</Button>
 					</PopoverTrigger>
 					<PopoverContent side="top" align="end" className="w-56 p-1 z-[60]" sideOffset={8}>
 						<div className="flex flex-col">
-							<button
+							<Button
 								type="button"
-								className="flex items-center justify-between px-3 py-2 text-sm rounded-md hover:bg-muted transition-colors"
+								variant="ghost"
+								className="flex items-center justify-between px-3 py-2 text-sm rounded-md hover:bg-muted h-auto w-full"
 								onClick={() => setTheme(theme === "dark" ? "light" : "dark")}
 							>
 								<div className="flex items-center gap-2">
@@ -385,11 +389,12 @@ export function SidebarShell({
 								<div className="text-xs text-muted-foreground">
 									{theme === "dark" ? "On" : "Off"}
 								</div>
-							</button>
+							</Button>
 							<div className="my-1 h-px bg-border" />
-							<button
+							<Button
 								type="button"
-								className="flex items-center gap-2 px-3 py-2 text-sm rounded-md hover:bg-muted transition-colors text-left text-muted-foreground hover:text-foreground"
+								variant="ghost"
+								className="flex items-center gap-2 px-3 py-2 text-sm rounded-md hover:bg-muted h-auto justify-start text-left text-muted-foreground hover:text-foreground w-full"
 								onClick={() => {
 									setUserMenuOpen(false);
 									handleSignOut();
@@ -397,7 +402,7 @@ export function SidebarShell({
 							>
 								<LogOut className="h-4 w-4" />
 								Log out
-							</button>
+							</Button>
 						</div>
 					</PopoverContent>
 				</Popover>

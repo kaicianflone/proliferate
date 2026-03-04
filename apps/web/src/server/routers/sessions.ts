@@ -18,6 +18,36 @@ import {
 import { z } from "zod";
 import { billingGatedProcedure, orgProcedure, publicProcedure } from "./middleware";
 
+function throwMappedSessionError(err: unknown, fallbackMessage: string): never {
+	if (err instanceof ORPCError) {
+		throw err;
+	}
+	if (err instanceof sessions.SessionLimitError) {
+		throw new ORPCError("FORBIDDEN", { message: err.message });
+	}
+	if (err instanceof sessions.ConfigurationNotFoundError) {
+		throw new ORPCError("BAD_REQUEST", { message: err.message });
+	}
+	if (err instanceof sessions.ConfigurationNoReposError) {
+		throw new ORPCError("BAD_REQUEST", { message: err.message });
+	}
+	if (err instanceof sessions.ConfigurationRepoUnauthorizedError) {
+		throw new ORPCError("UNAUTHORIZED", { message: err.message });
+	}
+	if (err instanceof sessions.SessionNotFoundError) {
+		throw new ORPCError("NOT_FOUND", { message: err.message });
+	}
+	if (err instanceof sessions.SessionInvalidStateError) {
+		throw new ORPCError("BAD_REQUEST", { message: err.message });
+	}
+	if (err instanceof sessions.SessionSnapshotQuotaError) {
+		throw new ORPCError("CONFLICT", { message: err.message });
+	}
+	throw new ORPCError("INTERNAL_SERVER_ERROR", {
+		message: err instanceof Error ? err.message : fallbackMessage,
+	});
+}
+
 async function createSessionOrThrow(input: {
 	configurationId?: string;
 	sessionType?: "setup" | "coding";
@@ -44,21 +74,7 @@ async function createSessionOrThrow(input: {
 			rerunOfSessionId: input.rerunOfSessionId,
 		});
 	} catch (err) {
-		if (err instanceof sessions.SessionLimitError) {
-			throw new ORPCError("FORBIDDEN", { message: err.message });
-		}
-		if (err instanceof sessions.ConfigurationNotFoundError) {
-			throw new ORPCError("BAD_REQUEST", { message: err.message });
-		}
-		if (err instanceof sessions.ConfigurationNoReposError) {
-			throw new ORPCError("BAD_REQUEST", { message: err.message });
-		}
-		if (err instanceof sessions.ConfigurationRepoUnauthorizedError) {
-			throw new ORPCError("UNAUTHORIZED", { message: err.message });
-		}
-		throw new ORPCError("INTERNAL_SERVER_ERROR", {
-			message: err instanceof Error ? err.message : "Failed to create session",
-		});
+		throwMappedSessionError(err, "Failed to create session");
 	}
 }
 
@@ -223,13 +239,7 @@ export const sessionsRouter = {
 			try {
 				return await sessions.pauseSession({ sessionId: input.id, orgId: context.orgId });
 			} catch (err) {
-				if (err instanceof sessions.SessionNotFoundError)
-					throw new ORPCError("NOT_FOUND", { message: err.message });
-				if (err instanceof sessions.SessionInvalidStateError)
-					throw new ORPCError("BAD_REQUEST", { message: err.message });
-				throw new ORPCError("INTERNAL_SERVER_ERROR", {
-					message: err instanceof Error ? err.message : "Failed to pause session",
-				});
+				throwMappedSessionError(err, "Failed to pause session");
 			}
 		}),
 
@@ -243,15 +253,7 @@ export const sessionsRouter = {
 			try {
 				return await sessions.snapshotSession({ sessionId: input.id, orgId: context.orgId });
 			} catch (err) {
-				if (err instanceof sessions.SessionNotFoundError)
-					throw new ORPCError("NOT_FOUND", { message: err.message });
-				if (err instanceof sessions.SessionInvalidStateError)
-					throw new ORPCError("BAD_REQUEST", { message: err.message });
-				if (err instanceof sessions.SessionSnapshotQuotaError)
-					throw new ORPCError("CONFLICT", { message: err.message });
-				throw new ORPCError("INTERNAL_SERVER_ERROR", {
-					message: err instanceof Error ? err.message : "Failed to create snapshot",
-				});
+				throwMappedSessionError(err, "Failed to create snapshot");
 			}
 		}),
 
@@ -350,13 +352,7 @@ export const sessionsRouter = {
 					saveToConfiguration: input.saveToConfiguration,
 				});
 			} catch (err) {
-				if (err instanceof sessions.SessionNotFoundError)
-					throw new ORPCError("NOT_FOUND", { message: err.message });
-				if (err instanceof sessions.SessionInvalidStateError)
-					throw new ORPCError("BAD_REQUEST", { message: err.message });
-				throw new ORPCError("INTERNAL_SERVER_ERROR", {
-					message: err instanceof Error ? err.message : "Failed to submit env",
-				});
+				throwMappedSessionError(err, "Failed to submit env");
 			}
 		}),
 

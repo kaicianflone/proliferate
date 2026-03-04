@@ -176,9 +176,11 @@ export function SetupSessionChrome({
 						Open Environment
 					</Button>
 					{hasSlack ? (
-						<button
+						<Button
 							type="button"
-							className="inline-flex items-center gap-1.5 rounded-md border border-border/70 bg-background px-2 py-1 hover:text-foreground transition-colors"
+							variant="outline"
+							size="sm"
+							className="inline-flex items-center gap-1.5 rounded-md border-border/70 bg-background px-2 py-1 hover:text-foreground h-auto"
 							onClick={handleToggleNotifications}
 						>
 							{isSubscribed ? (
@@ -187,7 +189,7 @@ export function SetupSessionChrome({
 								<Bell className="h-3.5 w-3.5 text-muted-foreground" />
 							)}
 							{isSubscribed ? "Slack notifications on" : "Notify me on Slack"}
-						</button>
+						</Button>
 					) : (
 						<a
 							href="/settings/connections"

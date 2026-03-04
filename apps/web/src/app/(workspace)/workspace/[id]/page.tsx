@@ -3,6 +3,7 @@
 export const dynamic = "force-dynamic";
 
 import { CodingSession } from "@/components/coding-session/coding-session";
+import { Button } from "@/components/ui/button";
 import { useMarkSessionViewed, useSessionData } from "@/hooks/sessions/use-sessions";
 import { organization, useActiveOrganization } from "@/lib/auth/client";
 import { useDashboardStore } from "@/stores/dashboard";
@@ -75,13 +76,13 @@ export default function SessionDetailPage({
 				<div className="flex items-center gap-2 px-4 py-2 bg-muted/60 border-b border-border text-sm text-muted-foreground shrink-0">
 					<Zap className="h-3.5 w-3.5" />
 					<span>Resumed from Coworker</span>
-					<button
-						type="button"
+					<Button
+						variant="ghost"
 						onClick={() => setShowCoworkerBanner(false)}
-						className="ml-auto text-muted-foreground/60 hover:text-foreground transition-colors"
+						className="ml-auto h-auto p-0 text-muted-foreground/60 hover:text-foreground transition-colors"
 					>
 						<X className="h-3.5 w-3.5" />
-					</button>
+					</Button>
 				</div>
 			)}
 			<div className="flex-1 min-h-0 flex flex-col">

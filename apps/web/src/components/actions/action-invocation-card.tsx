@@ -171,13 +171,15 @@ export function ActionInvocationCard({
 				{/* Session */}
 				{showSession && (
 					<div className="hidden md:block w-40 shrink-0">
-						<button
+						<Button
 							type="button"
-							className="text-xs text-muted-foreground hover:text-foreground transition-colors truncate block"
+							variant="ghost"
+							size="sm"
+							className="text-xs text-muted-foreground hover:text-foreground truncate block h-auto p-0"
 							onClick={onSessionClick}
 						>
 							{invocation.sessionTitle || `Session ${invocation.sessionId.slice(0, 8)}...`}
-						</button>
+						</Button>
 					</div>
 				)}
 

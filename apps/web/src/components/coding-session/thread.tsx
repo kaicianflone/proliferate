@@ -34,7 +34,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import Markdown from "react-markdown";
 import SpeechRecognition, { useSpeechRecognition } from "react-speech-recognition";
 import { InboxTray } from "./inbox-tray";
-import { allToolUIs } from "./tool-ui";
+import { allToolUIs } from "./tool-ui/all-tool-uis";
 
 // Shared markdown components for consistent rendering
 interface MarkdownContentProps {
@@ -619,10 +619,11 @@ const ToolFallback: FC<{ toolName: string; args: unknown; result?: unknown }> = 
 
 	return (
 		<div className="my-0.5">
-			<button
+			<Button
 				type="button"
+				variant="ghost"
 				onClick={() => hasResult && setExpanded(!expanded)}
-				className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors"
+				className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors h-auto p-0"
 				disabled={!hasResult}
 			>
 				{hasResult ? (
@@ -635,7 +636,7 @@ const ToolFallback: FC<{ toolName: string; args: unknown; result?: unknown }> = 
 					<Loader2 className="h-3 w-3 animate-spin" />
 				)}
 				<span>{toolName}</span>
-			</button>
+			</Button>
 			{expanded && resultString && (
 				<pre className="mt-1 max-h-40 overflow-auto rounded-lg border border-border/40 bg-muted/30 p-2 font-mono text-xs text-muted-foreground">
 					{resultString.slice(0, 3000)}

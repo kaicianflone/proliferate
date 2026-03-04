@@ -300,10 +300,11 @@ export function WorkerActivityTab({
 							return (
 								<div key={run.id}>
 									{/* Run header */}
-									<button
+									<Button
 										type="button"
+										variant="ghost"
 										onClick={() => toggleRun(run.id)}
-										className="w-full flex items-center gap-3 px-4 py-2.5 text-sm hover:bg-muted/50 transition-colors"
+										className="w-full flex items-center gap-3 px-4 py-2.5 text-sm hover:bg-muted/50 h-auto justify-start rounded-none"
 									>
 										{isExpanded ? (
 											<ChevronDown className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
@@ -325,7 +326,7 @@ export function WorkerActivityTab({
 										<span className="text-xs text-muted-foreground shrink-0 ml-auto">
 											{formatRelativeTime(run.createdAt)}
 										</span>
-									</button>
+									</Button>
 
 									{/* Expanded: events */}
 									{isExpanded && (

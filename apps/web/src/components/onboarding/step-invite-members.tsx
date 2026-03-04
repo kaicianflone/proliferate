@@ -132,13 +132,15 @@ export function StepInviteMembers({ onComplete }: StepInviteMembersProps) {
 											) : (
 												<span className="text-xs text-destructive">Failed</span>
 											)}
-											<button
+											<Button
 												type="button"
+												variant="ghost"
+												size="icon"
 												onClick={() => removeInvite(i)}
-												className="text-muted-foreground hover:text-foreground"
+												className="h-6 w-6 text-muted-foreground hover:text-foreground"
 											>
 												<X className="h-3.5 w-3.5" />
-											</button>
+											</Button>
 										</div>
 									</div>
 								))}

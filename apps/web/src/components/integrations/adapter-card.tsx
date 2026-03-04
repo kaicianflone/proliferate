@@ -95,16 +95,17 @@ export function AdapterCard({
 			</div>
 
 			{/* Action summary + expand toggle */}
-			<button
+			<Button
 				type="button"
-				className="flex items-center gap-2 px-4 py-2 w-full border-t border-border/60 text-xs text-muted-foreground hover:text-foreground transition-colors"
+				variant="ghost"
+				className="flex items-center gap-2 px-4 py-2 w-full border-t border-border/60 text-xs text-muted-foreground hover:text-foreground h-auto rounded-none justify-start"
 				onClick={() => setExpanded(!expanded)}
 			>
 				<ChevronRight className={cn("h-3 w-3 transition-transform", expanded && "rotate-90")} />
 				<span>
 					{adapter.actions.length} actions ({readCount} read, {writeCount} write)
 				</span>
-			</button>
+			</Button>
 
 			{/* Expanded action list */}
 			{expanded && (

@@ -337,7 +337,7 @@ export function SecretFilesEditor({
 					<p className="text-xs font-medium">Secret Files</p>
 				</div>
 				<div className="flex items-center gap-1.5">
-					<input
+					<Input
 						ref={fileInputRef}
 						type="file"
 						accept=".env,.txt"

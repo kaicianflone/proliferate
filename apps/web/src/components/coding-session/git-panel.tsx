@@ -3,6 +3,7 @@
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import {
 	Select,
 	SelectContent,
@@ -460,14 +461,14 @@ function CommitSection({
 				}}
 			/>
 			{gitState.untrackedFiles.length > 0 && (
-				<label className="flex items-center gap-1.5 text-xs text-muted-foreground cursor-pointer">
+				<Label className="flex items-center gap-1.5 text-xs text-muted-foreground cursor-pointer">
 					<Checkbox
 						checked={includeUntracked}
 						onCheckedChange={(v) => setIncludeUntracked(v === true)}
 						className="h-3.5 w-3.5"
 					/>
 					Include untracked files
-				</label>
+				</Label>
 			)}
 			<Button
 				variant="primary"
@@ -630,14 +631,15 @@ function CommitsSection({ gitState }: { gitState: GitState }) {
 
 	return (
 		<div className="space-y-1.5">
-			<button
+			<Button
 				type="button"
-				className="flex items-center gap-1 text-xs font-medium text-muted-foreground uppercase tracking-wider hover:text-foreground transition-colors"
+				variant="ghost"
+				className="flex items-center gap-1 text-xs font-medium text-muted-foreground uppercase tracking-wider hover:text-foreground transition-colors h-auto p-0"
 				onClick={() => setExpanded(!expanded)}
 			>
 				{expanded ? <ChevronDown className="h-3 w-3" /> : <ChevronRight className="h-3 w-3" />}
 				Recent Commits ({gitState.commits.length})
-			</button>
+			</Button>
 			<div className="space-y-1">
 				{displayCommits.map((c) => (
 					<div key={c.sha} className="flex items-start gap-1.5 text-xs">
@@ -646,13 +648,14 @@ function CommitsSection({ gitState }: { gitState: GitState }) {
 					</div>
 				))}
 				{!expanded && gitState.commits.length > 5 && (
-					<button
+					<Button
 						type="button"
-						className="text-xs text-muted-foreground hover:text-foreground transition-colors"
+						variant="ghost"
+						className="text-xs text-muted-foreground hover:text-foreground transition-colors h-auto p-0"
 						onClick={() => setExpanded(true)}
 					>
 						Show all {gitState.commits.length} commits
-					</button>
+					</Button>
 				)}
 			</div>
 		</div>

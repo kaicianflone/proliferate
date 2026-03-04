@@ -1,5 +1,6 @@
 "use client";
 
+import { Button } from "@/components/ui/button";
 import { useHasSlackInstallation } from "@/hooks/integrations/use-integrations";
 import {
 	useSessionNotificationSubscription,
@@ -130,9 +131,10 @@ export function SettingsPanel({
 					<>
 						<div className="border-b border-border/50 mx-4" />
 						<div className="px-4 py-3">
-							<button
+							<Button
 								type="button"
-								className="flex items-center gap-2 text-xs text-muted-foreground hover:text-foreground transition-colors w-full disabled:opacity-50 disabled:pointer-events-none"
+								variant="ghost"
+								className="flex items-center gap-2 text-xs text-muted-foreground hover:text-foreground w-full disabled:opacity-50 disabled:pointer-events-none h-auto justify-start p-0"
 								onClick={handleToggleNotifications}
 								disabled={!hasSlack}
 							>
@@ -149,7 +151,7 @@ export function SettingsPanel({
 										</span>
 									)}
 								</div>
-							</button>
+							</Button>
 						</div>
 					</>
 				)}

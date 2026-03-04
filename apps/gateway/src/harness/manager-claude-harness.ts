@@ -1,6 +1,11 @@
 /**
  * Manager Claude harness adapter.
- * Four-phase wake-cycle engine backed by the Claude SDK.
+ *
+ * Replaces the no-op stub with a real four-phase wake-cycle engine backed
+ * by the Claude SDK. Runs gateway-side as a temporary exception until
+ * Phase B builds the sandbox daemon (PR 24).
+ *
+ * Phases: ingest → triage → orchestrate → finalize
  */
 
 import Anthropic, { type ClientOptions } from "@anthropic-ai/sdk";
@@ -10,7 +15,7 @@ import type {
 	ManagerHarnessAdapter,
 	ManagerHarnessStartInput,
 	ManagerHarnessState,
-} from "@proliferate/shared/contracts/harness";
+} from "@proliferate/shared/contracts";
 import { MANAGER_TOOLS, executeManagerTool, filterToolsByCapabilities } from "./manager-tools";
 import {
 	type ManagerToolContext,
@@ -26,7 +31,7 @@ export type {
 	ManagerHarnessAdapter,
 	ManagerHarnessStartInput,
 	ManagerHarnessState,
-} from "@proliferate/shared/contracts/harness";
+} from "@proliferate/shared/contracts";
 
 const MAX_CONVERSATION_TURNS = 15;
 const MAX_RETRY_ATTEMPTS = 1;
@@ -377,7 +382,7 @@ export class ClaudeManagerHarnessAdapter implements ManagerHarnessAdapter {
 			// Non-critical
 		}
 
-		// Fetch pending directives and mark them as delivered
+		// Fetch pending directives
 		try {
 			const pendingDirectives = await workers.listPendingDirectives(ctx.managerSessionId);
 			if (pendingDirectives.length > 0) {
@@ -386,12 +391,6 @@ export class ClaudeManagerHarnessAdapter implements ManagerHarnessAdapter {
 					const payload = d.payloadJson as Record<string, unknown>;
 					const content = (payload?.content as string) ?? JSON.stringify(payload);
 					parts.push(`- ${content}`);
-				}
-				// Mark all ingested directives as delivered so they don't repeat
-				for (const d of pendingDirectives) {
-					await sessions.updateSessionMessageDeliveryState(d.id, "delivered", {
-						deliveredAt: new Date(),
-					});
 				}
 			}
 		} catch {

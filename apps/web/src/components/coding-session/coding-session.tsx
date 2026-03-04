@@ -6,6 +6,7 @@ import { Input } from "@/components/ui/input";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from "@/components/ui/resizable";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
+import { INVESTIGATION_TAB, MANAGER_PANEL_TABS, PANEL_TABS } from "@/config/coding-session";
 import { useRepo } from "@/hooks/org/use-repos";
 import { useBackgroundVscodeStart } from "@/hooks/sessions/use-background-vscode";
 import { useConfiguration } from "@/hooks/sessions/use-configurations";
@@ -19,23 +20,7 @@ import { startSnapshotProgressToast } from "@/lib/display/snapshot-progress-toas
 import { cn } from "@/lib/display/utils";
 import { usePreviewPanelStore } from "@/stores/preview-panel";
 import { AssistantRuntimeProvider } from "@assistant-ui/react";
-import {
-	AlertTriangle,
-	ArrowLeft,
-	ArrowRightLeft,
-	Code,
-	FolderTree,
-	GitBranch,
-	Globe,
-	KeyRound,
-	Layers,
-	Loader2,
-	MoreHorizontal,
-	Pin,
-	Settings,
-	SquareTerminal,
-	Zap,
-} from "lucide-react";
+import { ArrowLeft, ArrowRightLeft, Loader2, MoreHorizontal, Pin } from "lucide-react";
 import Link from "next/link";
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { SessionPanelProps } from "./right-panel";
@@ -44,27 +29,9 @@ import { SessionHeader } from "./session-header";
 import { SessionLoadingShell } from "./session-loading-shell";
 import { SetupSessionChrome } from "./setup-session-chrome";
 import { Thread } from "./thread";
-import { SessionContext } from "./tool-ui";
+import { SessionContext } from "./tool-ui/env-request-tool";
 import { useCodingSessionRuntime } from "./use-coding-session-runtime";
 import { WorkspaceStateBanner, deriveWorkspaceState } from "./workspace-state-banner";
-
-const PANEL_TABS = [
-	{ type: "url" as const, label: "Preview", icon: Globe },
-	{ type: "files" as const, label: "Files", icon: FolderTree },
-	{ type: "vscode" as const, label: "Code", icon: Code },
-	{ type: "terminal" as const, label: "Terminal", icon: SquareTerminal },
-	{ type: "git" as const, label: "Git", icon: GitBranch },
-	{ type: "services" as const, label: "Services", icon: Layers },
-	{ type: "artifacts" as const, label: "Workspace", icon: Zap },
-	{ type: "environment" as const, label: "Env", icon: KeyRound },
-	{ type: "settings" as const, label: "Settings", icon: Settings },
-];
-
-/** Manager sessions: simplified panel set (G9). */
-const MANAGER_PANEL_TABS = [
-	{ type: "terminal" as const, label: "Terminal", icon: SquareTerminal },
-	{ type: "settings" as const, label: "Settings", icon: Settings },
-];
 
 interface CodingSessionProps {
 	sessionId: string;
@@ -193,12 +160,7 @@ export function CodingSession({
 	const basePanelTabs = isManagerSession ? MANAGER_PANEL_TABS : PANEL_TABS;
 
 	// Build panel tabs — prepend investigation tab when runId is present
-	const effectivePanelTabs = runId
-		? [
-				{ type: "investigation" as const, label: "Investigate", icon: AlertTriangle },
-				...basePanelTabs,
-			]
-		: basePanelTabs;
+	const effectivePanelTabs = runId ? [INVESTIGATION_TAB, ...basePanelTabs] : basePanelTabs;
 
 	// Combine all loading states
 	const isLoading =

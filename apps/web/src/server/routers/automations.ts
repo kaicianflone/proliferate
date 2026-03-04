@@ -6,17 +6,7 @@
 
 import { GATEWAY_URL } from "@/lib/infra/gateway";
 import { ORPCError } from "@orpc/server";
-import {
-	automations,
-	configurations,
-	orgs,
-	runs,
-	schedules,
-	sessions,
-	templates,
-	wakes,
-	workers,
-} from "@proliferate/services";
+import { automations, orgs, runs, schedules, templates, workers } from "@proliferate/services";
 import {
 	AutomationConnectionSchema,
 	AutomationEventDetailSchema,
@@ -48,6 +38,51 @@ async function assertRunResolvePermission(userId: string, orgId: string): Promis
 			message: "Only admins and owners can resolve runs",
 		});
 	}
+}
+
+function throwAutomationORPCError(err: unknown, fallbackMessage: string): never {
+	if (err instanceof ORPCError) {
+		throw err;
+	}
+	if (err instanceof automations.AutomationNotFoundError) {
+		throw new ORPCError("NOT_FOUND", { message: err.message });
+	}
+	if (err instanceof automations.AutomationIntegrationNotFoundError) {
+		throw new ORPCError("NOT_FOUND", { message: err.message });
+	}
+	if (err instanceof automations.AutomationValidationError) {
+		throw new ORPCError("BAD_REQUEST", { message: err.message });
+	}
+	if (schedules.isCronValidationError(err)) {
+		throw new ORPCError("BAD_REQUEST", { message: err.message });
+	}
+	if (err instanceof runs.RunAlreadyAssignedError || err instanceof runs.RunNotResolvableError) {
+		throw new ORPCError("CONFLICT", { message: err.message });
+	}
+	if (err instanceof workers.WorkerNotFoundError) {
+		throw new ORPCError("NOT_FOUND", { message: "Worker not found" });
+	}
+	if (
+		err instanceof workers.WorkerResumeRequiredError ||
+		err instanceof workers.WorkerNotActiveError
+	) {
+		throw new ORPCError("CONFLICT", { message: err.message });
+	}
+
+	throw new ORPCError("INTERNAL_SERVER_ERROR", {
+		message: fallbackMessage,
+	});
+}
+
+type AutomationUpdatePayload = z.infer<typeof UpdateAutomationInputSchema>;
+
+function toAutomationUpdateInput(
+	input: AutomationUpdatePayload,
+): automations.UpdateAutomationInput {
+	return {
+		...input,
+		enabledTools: input.enabledTools as Record<string, unknown> | undefined,
+	};
 }
 
 export const automationsRouter = {
@@ -83,36 +118,14 @@ export const automationsRouter = {
 		.output(z.object({ automation: AutomationListItemSchema }))
 		.handler(async ({ input, context }) => {
 			try {
-				let defaultConfigurationId = input.defaultConfigurationId;
-				if (!defaultConfigurationId) {
-					const orgConfigurations = await configurations.listConfigurations(context.orgId);
-					const defaultConfig = orgConfigurations.find((c) => c.status === "default");
-					const readyConfig = orgConfigurations.find((c) => c.status === "ready");
-					const selectedConfig = defaultConfig ?? readyConfig;
-					if (!selectedConfig) {
-						throw new ORPCError("BAD_REQUEST", {
-							message: "No ready configuration available. Please create a configuration first.",
-						});
-					}
-					defaultConfigurationId = selectedConfig.id;
-				}
-
-				const automation = await automations.createAutomation(context.orgId, context.user.id, {
-					name: input.name,
-					description: input.description,
-					agentInstructions: input.agentInstructions,
-					defaultConfigurationId,
-					allowAgenticRepoSelection: input.allowAgenticRepoSelection,
-				});
+				const automation = await automations.createAutomationForOrg(
+					context.orgId,
+					context.user.id,
+					input,
+				);
 				return { automation };
 			} catch (err) {
-				if (err instanceof ORPCError) throw err;
-				if (err instanceof Error && err.message === "Configuration not found") {
-					throw new ORPCError("NOT_FOUND", { message: err.message });
-				}
-				throw new ORPCError("INTERNAL_SERVER_ERROR", {
-					message: "Failed to create automation",
-				});
+				throwAutomationORPCError(err, "Failed to create automation");
 			}
 		}),
 
@@ -141,21 +154,18 @@ export const automationsRouter = {
 				});
 				return { automation };
 			} catch (err) {
-				if (err instanceof Error) {
-					if (err.message.includes("not found")) {
-						throw new ORPCError("NOT_FOUND", { message: err.message });
-					}
-					if (
-						err.message.includes("not active") ||
-						err.message.includes("Missing required") ||
-						err.message.includes("is for")
-					) {
-						throw new ORPCError("BAD_REQUEST", { message: err.message });
-					}
+				if (err instanceof Error && err.message.includes("not found")) {
+					throw new ORPCError("NOT_FOUND", { message: err.message });
 				}
-				throw new ORPCError("INTERNAL_SERVER_ERROR", {
-					message: "Failed to create automation from template",
-				});
+				if (
+					err instanceof Error &&
+					(err.message.includes("not active") ||
+						err.message.includes("Missing required") ||
+						err.message.includes("is for"))
+				) {
+					throw new ORPCError("BAD_REQUEST", { message: err.message });
+				}
+				throwAutomationORPCError(err, "Failed to create automation from template");
 			}
 		}),
 
@@ -174,41 +184,22 @@ export const automationsRouter = {
 			const { id, ...updateData } = input;
 
 			try {
-				const automation = await automations.updateAutomation(id, context.orgId, {
-					name: updateData.name,
-					description: updateData.description,
-					enabled: updateData.enabled,
-					agentInstructions: updateData.agentInstructions,
-					defaultConfigurationId: updateData.defaultConfigurationId,
-					allowAgenticRepoSelection: updateData.allowAgenticRepoSelection,
-					agentType: updateData.agentType,
-					modelId: updateData.modelId,
-					llmFilterPrompt: updateData.llmFilterPrompt,
-					enabledTools: updateData.enabledTools as Record<string, unknown> | undefined,
-					llmAnalysisPrompt: updateData.llmAnalysisPrompt,
-					notificationDestinationType: updateData.notificationDestinationType,
-					notificationChannelId: updateData.notificationChannelId,
-					notificationSlackUserId: updateData.notificationSlackUserId,
-					notificationSlackInstallationId: updateData.notificationSlackInstallationId,
-					configSelectionStrategy: updateData.configSelectionStrategy,
-					fallbackConfigurationId: updateData.fallbackConfigurationId,
-					allowedConfigurationIds: updateData.allowedConfigurationIds,
-				});
+				const automation = await automations.updateAutomation(
+					id,
+					context.orgId,
+					toAutomationUpdateInput(updateData),
+				);
 				return { automation };
 			} catch (err) {
-				if (err instanceof Error) {
-					if (err.message === "Configuration not found") {
-						throw new ORPCError("NOT_FOUND", { message: err.message });
-					}
-					if (
-						err.message.includes("no snapshot") ||
+				if (
+					err instanceof Error &&
+					(err.message.includes("no snapshot") ||
 						err.message.includes("agent_decide") ||
-						err.message.includes("routing descriptions")
-					) {
-						throw new ORPCError("BAD_REQUEST", { message: err.message });
-					}
+						err.message.includes("routing descriptions"))
+				) {
+					throw new ORPCError("BAD_REQUEST", { message: err.message });
 				}
-				throw new ORPCError("NOT_FOUND", { message: "Automation not found" });
+				throwAutomationORPCError(err, "Failed to update automation");
 			}
 		}),
 
@@ -252,12 +243,7 @@ export const automationsRouter = {
 				});
 				return result;
 			} catch (err) {
-				if (err instanceof Error && err.message === "Automation not found") {
-					throw new ORPCError("NOT_FOUND", { message: err.message });
-				}
-				throw new ORPCError("INTERNAL_SERVER_ERROR", {
-					message: "Failed to fetch events",
-				});
+				throwAutomationORPCError(err, "Failed to fetch events");
 			}
 		}),
 
@@ -303,12 +289,7 @@ export const automationsRouter = {
 				);
 				return { triggers };
 			} catch (err) {
-				if (err instanceof Error && err.message === "Automation not found") {
-					throw new ORPCError("NOT_FOUND", { message: err.message });
-				}
-				throw new ORPCError("INTERNAL_SERVER_ERROR", {
-					message: "Failed to fetch triggers",
-				});
+				throwAutomationORPCError(err, "Failed to fetch triggers");
 			}
 		}),
 
@@ -355,20 +336,7 @@ export const automationsRouter = {
 				);
 				return { trigger };
 			} catch (err) {
-				if (err instanceof Error) {
-					if (err.message === "Automation not found") {
-						throw new ORPCError("NOT_FOUND", { message: err.message });
-					}
-					if (err.message === "Integration not found") {
-						throw new ORPCError("NOT_FOUND", { message: err.message });
-					}
-					if (schedules.isCronValidationError(err)) {
-						throw new ORPCError("BAD_REQUEST", { message: err.message });
-					}
-				}
-				throw new ORPCError("INTERNAL_SERVER_ERROR", {
-					message: "Failed to create trigger",
-				});
+				throwAutomationORPCError(err, "Failed to create trigger");
 			}
 		}),
 
@@ -466,12 +434,7 @@ export const automationsRouter = {
 				}));
 				return { connections };
 			} catch (err) {
-				if (err instanceof Error && err.message === "Automation not found") {
-					throw new ORPCError("NOT_FOUND", { message: err.message });
-				}
-				throw new ORPCError("INTERNAL_SERVER_ERROR", {
-					message: "Failed to fetch connections",
-				});
+				throwAutomationORPCError(err, "Failed to fetch connections");
 			}
 		}),
 
@@ -486,17 +449,7 @@ export const automationsRouter = {
 				await automations.addAutomationConnection(input.id, context.orgId, input.integrationId);
 				return { success: true };
 			} catch (err) {
-				if (err instanceof Error) {
-					if (err.message === "Automation not found") {
-						throw new ORPCError("NOT_FOUND", { message: err.message });
-					}
-					if (err.message === "Integration not found") {
-						throw new ORPCError("NOT_FOUND", { message: err.message });
-					}
-				}
-				throw new ORPCError("INTERNAL_SERVER_ERROR", {
-					message: "Failed to add connection",
-				});
+				throwAutomationORPCError(err, "Failed to add connection");
 			}
 		}),
 
@@ -511,12 +464,7 @@ export const automationsRouter = {
 				await automations.removeAutomationConnection(input.id, context.orgId, input.integrationId);
 				return { success: true };
 			} catch (err) {
-				if (err instanceof Error && err.message === "Automation not found") {
-					throw new ORPCError("NOT_FOUND", { message: err.message });
-				}
-				throw new ORPCError("INTERNAL_SERVER_ERROR", {
-					message: "Failed to remove connection",
-				});
+				throwAutomationORPCError(err, "Failed to remove connection");
 			}
 		}),
 
@@ -535,10 +483,7 @@ export const automationsRouter = {
 				const modes = await automations.getAutomationActionModes(input.id, context.orgId);
 				return { modes };
 			} catch (err) {
-				if (err instanceof Error && err.message === "Automation not found") {
-					throw new ORPCError("NOT_FOUND", { message: err.message });
-				}
-				throw err;
+				throwAutomationORPCError(err, "Failed to fetch action modes");
 			}
 		}),
 
@@ -559,10 +504,7 @@ export const automationsRouter = {
 				await automations.setAutomationActionMode(input.id, context.orgId, input.key, input.mode);
 				return { success: true };
 			} catch (err) {
-				if (err instanceof Error && err.message === "Automation not found") {
-					throw new ORPCError("NOT_FOUND", { message: err.message });
-				}
-				throw err;
+				throwAutomationORPCError(err, "Failed to set action mode");
 			}
 		}),
 
@@ -782,10 +724,7 @@ export const automationsRouter = {
 				const result = await automations.triggerManualRun(input.id, context.orgId, context.user.id);
 				return { run: { id: result.runId, status: result.status } };
 			} catch (err) {
-				if (err instanceof Error && err.message === "Automation not found") {
-					throw new ORPCError("NOT_FOUND", { message: err.message });
-				}
-				throw err;
+				throwAutomationORPCError(err, "Failed to trigger manual run");
 			}
 		}),
 
@@ -930,42 +869,15 @@ export const automationsRouter = {
 			}),
 		)
 		.handler(async ({ input, context }) => {
-			const name = input?.name || "Untitled coworker";
-
-			// All three steps run in a single transaction to avoid orphaned rows on partial failure
-			const worker = await workers.withTransaction(async (tx) => {
-				// Step 1: Create placeholder session (kind=null to avoid manager_shape_check)
-				const placeholderSession = await sessions.createManagerSessionPlaceholder(
-					{
-						organizationId: context.orgId,
-						createdBy: context.user.id,
-						repoId: input?.repoId,
-						configurationId: input?.configurationId,
-						visibility: "org",
-						title: `Manager: ${name}`,
-					},
-					tx,
-				);
-
-				// Step 2: Create worker linked to the placeholder session
-				const w = await workers.createWorker(
-					{
-						organizationId: context.orgId,
-						name,
-						objective: input?.objective,
-						managerSessionId: placeholderSession.id,
-						modelId: input?.modelId,
-						createdBy: context.user.id,
-					},
-					tx,
-				);
-
-				// Step 3: Promote session to kind='manager' with worker linkage
-				await sessions.promoteToManagerSession(placeholderSession.id, w.id, tx);
-
-				return w;
+			const worker = await workers.createWorkerWithManagerSession({
+				organizationId: context.orgId,
+				createdBy: context.user.id,
+				name: input?.name,
+				objective: input?.objective,
+				modelId: input?.modelId,
+				repoId: input?.repoId,
+				configurationId: input?.configurationId,
 			});
-
 			return {
 				worker: {
 					id: worker.id,
@@ -1005,7 +917,7 @@ export const automationsRouter = {
 			}),
 		)
 		.handler(async ({ context }) => {
-			const workersList = await workers.listWorkersByOrgWithCounts(context.orgId);
+			const workersList = await workers.listWorkersForOrg(context.orgId);
 			return {
 				workers: workersList.map((w) => ({
 					id: w.id,
@@ -1055,10 +967,14 @@ export const automationsRouter = {
 			}),
 		)
 		.handler(async ({ input, context }) => {
-			const workersList = await workers.listWorkersByOrgWithCounts(context.orgId);
-			const worker = workersList.find((w) => w.id === input.id);
-			if (!worker) {
-				throw new ORPCError("NOT_FOUND", { message: "Worker not found" });
+			let worker: Awaited<ReturnType<typeof workers.getWorkerForOrgWithCounts>>;
+			try {
+				worker = await workers.getWorkerForOrgWithCounts(input.id, context.orgId);
+			} catch (err) {
+				if (err instanceof workers.WorkerNotFoundError) {
+					throw new ORPCError("NOT_FOUND", { message: "Worker not found" });
+				}
+				throw err;
 			}
 			return {
 				worker: {
@@ -1122,33 +1038,19 @@ export const automationsRouter = {
 			}),
 		)
 		.handler(async ({ input, context }) => {
-			const worker = await workers.findWorkerById(input.workerId, context.orgId);
-			if (!worker) {
-				throw new ORPCError("NOT_FOUND", { message: "Worker not found" });
+			try {
+				const runsList = await workers.listWorkerRunsForOrg(
+					input.workerId,
+					context.orgId,
+					input.limit,
+				);
+				return { runs: runsList };
+			} catch (err) {
+				if (err instanceof workers.WorkerNotFoundError) {
+					throw new ORPCError("NOT_FOUND", { message: "Worker not found" });
+				}
+				throw err;
 			}
-			const runsList = await workers.listRunsByWorkerWithEvents(input.workerId, input.limit);
-			return {
-				runs: runsList.map((run) => ({
-					id: run.id,
-					workerId: run.workerId,
-					status: run.status,
-					summary: run.summary,
-					wakeEventId: run.wakeEventId,
-					createdAt: run.createdAt,
-					startedAt: run.startedAt,
-					completedAt: run.completedAt,
-					events: run.events.map((e) => ({
-						id: e.id,
-						eventIndex: e.eventIndex,
-						eventType: e.eventType,
-						summaryText: e.summaryText,
-						payloadJson: e.payloadJson,
-						sessionId: e.sessionId,
-						actionInvocationId: e.actionInvocationId,
-						createdAt: e.createdAt,
-					})),
-				})),
-			};
 		}),
 
 	/**
@@ -1178,27 +1080,19 @@ export const automationsRouter = {
 			}),
 		)
 		.handler(async ({ input, context }) => {
-			const worker = await workers.findWorkerById(input.workerId, context.orgId);
-			if (!worker) {
-				throw new ORPCError("NOT_FOUND", { message: "Worker not found" });
+			try {
+				const sessionsList = await workers.listWorkerSessionsForOrg(
+					input.workerId,
+					context.orgId,
+					input.limit,
+				);
+				return { sessions: sessionsList };
+			} catch (err) {
+				if (err instanceof workers.WorkerNotFoundError) {
+					throw new ORPCError("NOT_FOUND", { message: "Worker not found" });
+				}
+				throw err;
 			}
-			const sessionsList = await workers.listSessionsByWorker(
-				input.workerId,
-				context.orgId,
-				input.limit,
-			);
-			return {
-				sessions: sessionsList.map((s) => ({
-					id: s.id,
-					title: s.title,
-					status: s.status,
-					repoId: s.repoId,
-					branchName: s.branchName,
-					operatorStatus: s.operatorStatus,
-					updatedAt: s.lastActivityAt,
-					startedAt: s.startedAt,
-				})),
-			};
 		}),
 
 	/**
@@ -1220,20 +1114,15 @@ export const automationsRouter = {
 			}),
 		)
 		.handler(async ({ input, context }) => {
-			const worker = await workers.findWorkerById(input.workerId, context.orgId);
-			if (!worker) {
-				throw new ORPCError("NOT_FOUND", { message: "Worker not found" });
+			try {
+				const directives = await workers.listPendingDirectivesForOrg(input.workerId, context.orgId);
+				return { directives };
+			} catch (err) {
+				if (err instanceof workers.WorkerNotFoundError) {
+					throw new ORPCError("NOT_FOUND", { message: "Worker not found" });
+				}
+				throw err;
 			}
-			const messages = await workers.listPendingDirectives(worker.managerSessionId);
-			return {
-				directives: messages.map((m) => ({
-					id: m.id,
-					messageType: m.messageType,
-					payloadJson: m.payloadJson,
-					queuedAt: m.queuedAt,
-					senderUserId: m.senderUserId,
-				})),
-			};
 		}),
 
 	/**
@@ -1253,32 +1142,20 @@ export const automationsRouter = {
 			}),
 		)
 		.handler(async ({ input, context }) => {
-			const worker = await workers.findWorkerById(input.workerId, context.orgId);
-			if (!worker) {
-				throw new ORPCError("NOT_FOUND", { message: "Worker not found" });
-			}
-
-			const { messageId } = await workers.sendDirective({
-				managerSessionId: worker.managerSessionId,
-				content: input.content,
-				senderUserId: context.user.id,
-			});
-
-			// Create a wake event if the worker is active
-			if (worker.status === "active") {
-				try {
-					await wakes.createWakeEvent({
-						workerId: worker.id,
-						organizationId: context.orgId,
-						source: "manual_message",
-						payloadJson: { messageId },
-					});
-				} catch {
-					// Non-fatal: the directive is queued regardless
+			try {
+				const { messageId } = await workers.sendDirectiveToWorker({
+					workerId: input.workerId,
+					organizationId: context.orgId,
+					senderUserId: context.user.id,
+					content: input.content,
+				});
+				return { success: true, messageId };
+			} catch (err) {
+				if (err instanceof workers.WorkerNotFoundError) {
+					throw new ORPCError("NOT_FOUND", { message: "Worker not found" });
 				}
+				throw err;
 			}
-
-			return { success: true, messageId };
 		}),
 
 	/**
@@ -1309,8 +1186,12 @@ export const automationsRouter = {
 		)
 		.handler(async ({ input, context }) => {
 			try {
-				const worker = await workers.pauseWorker(input.workerId, context.orgId, context.user.id);
-				return { worker: mapWorkerToDetail(worker) };
+				const worker = await workers.pauseWorkerForOrg(
+					input.workerId,
+					context.orgId,
+					context.user.id,
+				);
+				return { worker };
 			} catch (err) {
 				if (err instanceof workers.WorkerNotFoundError) {
 					throw new ORPCError("NOT_FOUND", { message: err.message });
@@ -1347,8 +1228,8 @@ export const automationsRouter = {
 		)
 		.handler(async ({ input, context }) => {
 			try {
-				const worker = await workers.resumeWorker(input.workerId, context.orgId);
-				return { worker: mapWorkerToDetail(worker) };
+				const worker = await workers.resumeWorkerForOrg(input.workerId, context.orgId);
+				return { worker };
 			} catch (err) {
 				if (err instanceof workers.WorkerNotFoundError) {
 					throw new ORPCError("NOT_FOUND", { message: err.message });
@@ -1440,20 +1321,17 @@ export const automationsRouter = {
 		)
 		.handler(async ({ input, context }) => {
 			const { id, repoId, configurationId, ...fields } = input;
-			const updated = await workers.updateWorker(id, context.orgId, fields);
+			const updated = await workers.updateWorkerForOrg({
+				workerId: id,
+				organizationId: context.orgId,
+				fields,
+				repoId,
+				configurationId,
+			});
 			if (!updated) {
 				throw new ORPCError("NOT_FOUND", { message: "Worker not found" });
 			}
-
-			// Propagate repo/configuration changes to the manager session
-			if (repoId !== undefined || configurationId !== undefined) {
-				await sessions.updateManagerSessionLinkage(updated.managerSessionId, context.orgId, {
-					repoId: repoId ?? null,
-					configurationId: configurationId ?? null,
-				});
-			}
-
-			return { worker: mapWorkerToDetail(updated) };
+			return { worker: updated };
 		}),
 
 	/**
@@ -1470,26 +1348,6 @@ export const automationsRouter = {
 			return { success: true };
 		}),
 };
-
-function mapWorkerToDetail(w: workers.WorkerRow) {
-	return {
-		id: w.id,
-		name: w.name,
-		status: w.status,
-		objective: w.objective,
-		modelId: w.modelId,
-		managerSessionId: w.managerSessionId,
-		lastWakeAt: w.lastWakeAt,
-		lastCompletedRunAt: w.lastCompletedRunAt,
-		lastErrorCode: w.lastErrorCode,
-		pausedAt: w.pausedAt,
-		createdBy: w.createdBy,
-		computeProfile: w.computeProfile,
-		pausedBy: w.pausedBy,
-		createdAt: w.createdAt,
-		updatedAt: w.updatedAt,
-	};
-}
 
 function mapRunToSchema(run: runs.RunListItem) {
 	const parsedContext = run.triggerEvent?.parsedContext as Record<string, unknown> | null;

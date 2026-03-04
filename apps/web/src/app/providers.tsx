@@ -1,14 +1,14 @@
 "use client";
 
 import { CodingSessionModal } from "@/components/coding-session/coding-session-modal";
-import { HelpSheet } from "@/components/help";
+import { HelpSheet } from "@/components/help/help-sheet";
+import { IntercomProvider } from "@/components/providers/intercom";
 import {
-	IntercomProvider,
 	PostHogPageView,
 	PostHogProvider,
 	PostHogUserIdentity,
-	ThemeProvider,
-} from "@/components/providers";
+} from "@/components/providers/posthog";
+import { ThemeProvider } from "@/components/providers/theme-provider";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { useState } from "react";
 

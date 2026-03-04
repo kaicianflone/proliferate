@@ -100,12 +100,14 @@ export function ServicesPanel({ sessionId }: ServicesPanelProps) {
 						{/* Service tabs */}
 						<div className="flex items-center gap-1 px-3 py-2 border-b border-border overflow-x-auto shrink-0">
 							{services.map((svc) => (
-								<button
+								<Button
 									key={svc.name}
 									type="button"
+									variant="ghost"
+									size="sm"
 									onClick={() => toggleService(svc.name)}
 									className={cn(
-										"inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-medium transition-colors shrink-0",
+										"inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-medium shrink-0 h-auto",
 										activeServices.has(svc.name)
 											? "bg-secondary text-secondary-foreground"
 											: "text-muted-foreground hover:text-foreground hover:bg-muted/50",
@@ -113,7 +115,7 @@ export function ServicesPanel({ sessionId }: ServicesPanelProps) {
 								>
 									<StatusDot status={serviceStatusToDot(svc.status)} size="sm" />
 									{svc.name}
-								</button>
+								</Button>
 							))}
 						</div>
 

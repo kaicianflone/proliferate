@@ -16,11 +16,28 @@ import {
 	FinalizeSetupInputSchema,
 	FinalizeSetupResponseSchema,
 } from "@proliferate/shared/contracts/repos";
-import { parseConfigurationServiceCommands } from "@proliferate/shared/sandbox";
 import { z } from "zod";
 import { orgProcedure } from "./middleware";
 
 const log = logger.child({ handler: "configurations" });
+
+function throwMappedConfigurationError(error: unknown, internalMessage: string): never {
+	if (error instanceof ORPCError) {
+		throw error;
+	}
+	if (error instanceof configurations.ConfigurationNotFoundError) {
+		throw new ORPCError("NOT_FOUND", { message: error.message });
+	}
+	if (error instanceof configurations.ConfigurationForbiddenError) {
+		throw new ORPCError("FORBIDDEN", { message: error.message });
+	}
+	if (error instanceof configurations.ConfigurationValidationError) {
+		throw new ORPCError("BAD_REQUEST", { message: error.message });
+	}
+
+	log.error({ err: error }, internalMessage);
+	throw new ORPCError("INTERNAL_SERVER_ERROR", { message: internalMessage });
+}
 
 export const configurationsRouter = {
 	/**
@@ -44,17 +61,12 @@ export const configurationsRouter = {
 		.input(z.object({ id: z.string().uuid() }))
 		.output(z.object({ configuration: ConfigurationSchema }))
 		.handler(async ({ input, context }) => {
-			const belongsToOrg = await configurations.configurationBelongsToOrg(input.id, context.orgId);
-			if (!belongsToOrg) {
-				throw new ORPCError("NOT_FOUND", { message: "Configuration not found" });
+			try {
+				const configuration = await configurations.getConfigurationForOrg(input.id, context.orgId);
+				return { configuration };
+			} catch (error) {
+				throwMappedConfigurationError(error, "Failed to fetch configuration");
 			}
-
-			const configuration = await configurations.getConfiguration(input.id);
-			if (!configuration) {
-				throw new ORPCError("NOT_FOUND", { message: "Configuration not found" });
-			}
-
-			return { configuration };
 		}),
 
 	/**
@@ -74,7 +86,7 @@ export const configurationsRouter = {
 			}
 
 			try {
-				const result = await configurations.createConfiguration({
+				const result = await configurations.createConfigurationForOrg({
 					organizationId: context.orgId,
 					userId: context.user.id,
 					repoIds,
@@ -86,17 +98,7 @@ export const configurationsRouter = {
 					repos: result.repoCount,
 				};
 			} catch (error) {
-				const message = error instanceof Error ? error.message : "Failed to create configuration";
-
-				if (message === "One or more repos not found") {
-					throw new ORPCError("NOT_FOUND", { message });
-				}
-				if (message === "Unauthorized access to repo") {
-					throw new ORPCError("FORBIDDEN", { message });
-				}
-
-				log.error({ err: error }, "Failed to create configuration");
-				throw new ORPCError("INTERNAL_SERVER_ERROR", { message });
+				throwMappedConfigurationError(error, "Failed to create configuration");
 			}
 		}),
 
@@ -113,42 +115,15 @@ export const configurationsRouter = {
 		.output(z.object({ configuration: ConfigurationSchema }))
 		.handler(async ({ input, context }) => {
 			const { id, name, notes, routingDescription } = input;
-
-			// Verify the configuration exists and belongs to this org
-			const belongsToOrg = await configurations.configurationBelongsToOrg(id, context.orgId);
-			if (!belongsToOrg) {
-				throw new ORPCError("NOT_FOUND", { message: "Configuration not found" });
-			}
-
 			try {
-				const updated = await configurations.updateConfiguration(id, {
+				const configuration = await configurations.updateConfigurationForOrg(id, context.orgId, {
 					name,
 					notes,
 					routingDescription,
 				});
-
-				return {
-					configuration: {
-						id: updated.id!,
-						snapshotId: updated.snapshotId ?? null,
-						status: updated.status ?? null,
-						name: updated.name ?? null,
-						notes: updated.notes ?? null,
-						routingDescription: updated.routingDescription ?? null,
-						createdAt: updated.createdAt?.toISOString() ?? null,
-						createdBy: updated.createdBy ?? null,
-						sandboxProvider: updated.sandboxProvider ?? null,
-					},
-				};
+				return { configuration };
 			} catch (error) {
-				const message = error instanceof Error ? error.message : "Failed to update configuration";
-
-				if (message === "No fields to update") {
-					throw new ORPCError("BAD_REQUEST", { message });
-				}
-
-				log.error({ err: error }, "Failed to update configuration");
-				throw new ORPCError("INTERNAL_SERVER_ERROR", { message });
+				throwMappedConfigurationError(error, "Failed to update configuration");
 			}
 		}),
 
@@ -159,20 +134,11 @@ export const configurationsRouter = {
 		.input(z.object({ id: z.string().uuid() }))
 		.output(z.object({ success: z.boolean() }))
 		.handler(async ({ input, context }) => {
-			// Verify the configuration belongs to this org
-			const belongsToOrg = await configurations.configurationBelongsToOrg(input.id, context.orgId);
-			if (!belongsToOrg) {
-				throw new ORPCError("NOT_FOUND", { message: "Configuration not found" });
-			}
-
 			try {
-				await configurations.deleteConfiguration(input.id);
+				await configurations.deleteConfigurationForOrg(input.id, context.orgId);
 				return { success: true };
 			} catch (error) {
-				log.error({ err: error }, "Failed to delete configuration");
-				throw new ORPCError("INTERNAL_SERVER_ERROR", {
-					message: "Failed to delete configuration",
-				});
+				throwMappedConfigurationError(error, "Failed to delete configuration");
 			}
 		}),
 
@@ -194,17 +160,15 @@ export const configurationsRouter = {
 			}),
 		)
 		.handler(async ({ input, context }) => {
-			const belongsToOrg = await configurations.configurationBelongsToOrg(
-				input.configurationId,
-				context.orgId,
-			);
-			if (!belongsToOrg) {
-				throw new ORPCError("NOT_FOUND", { message: "Configuration not found" });
+			try {
+				const commands = await configurations.getConfigurationServiceCommandsForOrg(
+					input.configurationId,
+					context.orgId,
+				);
+				return { commands };
+			} catch (error) {
+				throwMappedConfigurationError(error, "Failed to fetch configuration service commands");
 			}
-
-			const row = await configurations.getConfigurationServiceCommands(input.configurationId);
-			const commands = parseConfigurationServiceCommands(row?.serviceCommands);
-			return { commands };
 		}),
 
 	/**
@@ -227,15 +191,12 @@ export const configurationsRouter = {
 			}),
 		)
 		.handler(async ({ input, context }) => {
-			const belongsToOrg = await configurations.configurationBelongsToOrg(
-				input.configurationId,
-				context.orgId,
-			);
-			if (!belongsToOrg) {
-				throw new ORPCError("NOT_FOUND", { message: "Configuration not found" });
+			try {
+				await configurations.getConfigurationForOrg(input.configurationId, context.orgId);
+				return configurations.getEffectiveServiceCommands(input.configurationId);
+			} catch (error) {
+				throwMappedConfigurationError(error, "Failed to fetch effective service commands");
 			}
-
-			return configurations.getEffectiveServiceCommands(input.configurationId);
 		}),
 
 	/**
@@ -245,16 +206,15 @@ export const configurationsRouter = {
 		.input(z.object({ configurationId: z.string().uuid() }))
 		.output(z.object({ envFiles: z.unknown().nullable() }))
 		.handler(async ({ input, context }) => {
-			const belongsToOrg = await configurations.configurationBelongsToOrg(
-				input.configurationId,
-				context.orgId,
-			);
-			if (!belongsToOrg) {
-				throw new ORPCError("NOT_FOUND", { message: "Configuration not found" });
+			try {
+				const envFiles = await configurations.getConfigurationEnvFilesForOrg(
+					input.configurationId,
+					context.orgId,
+				);
+				return { envFiles };
+			} catch (error) {
+				throwMappedConfigurationError(error, "Failed to fetch configuration env files");
 			}
-
-			const envFiles = await configurations.getConfigurationEnvFiles(input.configurationId);
-			return { envFiles: envFiles ?? null };
 		}),
 
 	/**
@@ -278,20 +238,17 @@ export const configurationsRouter = {
 		)
 		.output(z.object({ success: z.boolean() }))
 		.handler(async ({ input, context }) => {
-			const belongsToOrg = await configurations.configurationBelongsToOrg(
-				input.configurationId,
-				context.orgId,
-			);
-			if (!belongsToOrg) {
-				throw new ORPCError("NOT_FOUND", { message: "Configuration not found" });
+			try {
+				await configurations.updateConfigurationServiceCommandsForOrg({
+					configurationId: input.configurationId,
+					orgId: context.orgId,
+					updatedBy: context.user.id,
+					serviceCommands: input.commands,
+				});
+				return { success: true };
+			} catch (error) {
+				throwMappedConfigurationError(error, "Failed to update configuration service commands");
 			}
-
-			await configurations.updateConfigurationServiceCommands({
-				configurationId: input.configurationId,
-				serviceCommands: input.commands,
-				updatedBy: context.user.id,
-			});
-			return { success: true };
 		}),
 
 	/**
@@ -333,18 +290,10 @@ export const configurationsRouter = {
 		.output(z.object({ success: z.boolean() }))
 		.handler(async ({ input, context }) => {
 			try {
-				await configurations.attachRepo(input.configurationId, input.repoId, context.orgId);
+				await configurations.attachRepoForOrg(input.configurationId, input.repoId, context.orgId);
 				return { success: true };
 			} catch (error) {
-				const message = error instanceof Error ? error.message : "Failed to attach repo";
-				if (message === "Configuration not found" || message === "Repo not found") {
-					throw new ORPCError("NOT_FOUND", { message });
-				}
-				if (message === "Unauthorized access to repo") {
-					throw new ORPCError("FORBIDDEN", { message });
-				}
-				log.error({ err: error }, "Failed to attach repo");
-				throw new ORPCError("INTERNAL_SERVER_ERROR", { message });
+				throwMappedConfigurationError(error, "Failed to attach repo");
 			}
 		}),
 
@@ -361,15 +310,10 @@ export const configurationsRouter = {
 		.output(z.object({ success: z.boolean() }))
 		.handler(async ({ input, context }) => {
 			try {
-				await configurations.detachRepo(input.configurationId, input.repoId, context.orgId);
+				await configurations.detachRepoForOrg(input.configurationId, input.repoId, context.orgId);
 				return { success: true };
 			} catch (error) {
-				const message = error instanceof Error ? error.message : "Failed to detach repo";
-				if (message === "Configuration not found") {
-					throw new ORPCError("NOT_FOUND", { message });
-				}
-				log.error({ err: error }, "Failed to detach repo");
-				throw new ORPCError("INTERNAL_SERVER_ERROR", { message });
+				throwMappedConfigurationError(error, "Failed to detach repo");
 			}
 		}),
 };

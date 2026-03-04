@@ -1,16 +1,14 @@
 "use client";
 
 import { PageShell } from "@/components/dashboard/page-shell";
-import {
-	BuyCreditsSection,
-	CostDriversSection,
-	CreditUsageSection,
-	EntitlementStatusSection,
-	OverageSection,
-	PlanSection,
-	RecentEventsSection,
-	UsageSummarySection,
-} from "@/components/settings/billing";
+import { BuyCreditsSection } from "@/components/settings/billing/buy-credits-section";
+import { CostDriversSection } from "@/components/settings/billing/cost-drivers-section";
+import { CreditUsageSection } from "@/components/settings/billing/credit-usage-section";
+import { EntitlementStatusSection } from "@/components/settings/billing/entitlement-status-section";
+import { OverageSection } from "@/components/settings/billing/overage-section";
+import { PlanSection } from "@/components/settings/billing/plan-section";
+import { RecentEventsSection } from "@/components/settings/billing/recent-events-section";
+import { UsageSummarySection } from "@/components/settings/billing/usage-summary-section";
 import { useBilling, useUpdateBillingSettings } from "@/hooks/org/use-billing";
 import { useOrgMembers } from "@/hooks/org/use-orgs";
 import { useActiveOrganization, useSession } from "@/lib/auth/client";

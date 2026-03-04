@@ -1,4 +1,4 @@
-import { openIntercomMessenger } from "@/components/providers";
+import { openIntercomMessenger } from "@/components/providers/intercom";
 import { Button } from "@/components/ui/button";
 import { ChatBubbleIcon } from "@/components/ui/icons";
 import { BookOpen } from "lucide-react";

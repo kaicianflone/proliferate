@@ -53,7 +53,7 @@ function throwAsORPC(err: unknown): never {
 	if (err instanceof integrations.SlackConfigValidationError) {
 		throw new ORPCError("BAD_REQUEST", { message: err.message });
 	}
-	if (err instanceof Error && err.message === "Organization not found") {
+	if (err instanceof integrations.OrganizationNotFoundError) {
 		throw new ORPCError("NOT_FOUND", { message: err.message });
 	}
 	throw err;

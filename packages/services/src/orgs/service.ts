@@ -47,6 +47,13 @@ export interface RemoveMemberResult {
 	error?: string;
 }
 
+export class ActionModePermissionError extends Error {
+	constructor(message = "Only admins and owners can manage action modes") {
+		super(message);
+		this.name = "ActionModePermissionError";
+	}
+}
+
 // ============================================
 // Service functions
 // ============================================
@@ -428,7 +435,7 @@ export async function setActionMode(
 ): Promise<void> {
 	const role = await orgsDb.getUserRole(userId, orgId);
 	if (role !== "owner" && role !== "admin") {
-		throw new Error("Only admins and owners can manage action modes");
+		throw new ActionModePermissionError();
 	}
 	await orgsDb.setActionMode(orgId, key, mode);
 }

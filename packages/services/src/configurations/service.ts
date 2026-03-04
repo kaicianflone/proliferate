@@ -62,6 +62,27 @@ export interface EffectiveServiceCommandsResult {
 	workspaces: string[];
 }
 
+export class ConfigurationNotFoundError extends Error {
+	constructor(message = "Configuration not found") {
+		super(message);
+		this.name = "ConfigurationNotFoundError";
+	}
+}
+
+export class ConfigurationForbiddenError extends Error {
+	constructor(message: string) {
+		super(message);
+		this.name = "ConfigurationForbiddenError";
+	}
+}
+
+export class ConfigurationValidationError extends Error {
+	constructor(message: string) {
+		super(message);
+		this.name = "ConfigurationValidationError";
+	}
+}
+
 // ============================================
 // Service functions
 // ============================================
@@ -258,6 +279,149 @@ export async function configurationBelongsToOrg(
 	const configuration = await configurationsDb.findById(configurationId);
 	if (!configuration) return false;
 	return configuration.configurationRepos.some((pr) => pr.repo?.organizationId === orgId);
+}
+
+async function assertConfigurationBelongsToOrg(
+	configurationId: string,
+	orgId: string,
+): Promise<void> {
+	const belongsToOrg = await configurationBelongsToOrg(configurationId, orgId);
+	if (!belongsToOrg) {
+		throw new ConfigurationNotFoundError();
+	}
+}
+
+export async function getConfigurationForOrg(
+	configurationId: string,
+	orgId: string,
+): Promise<Configuration> {
+	await assertConfigurationBelongsToOrg(configurationId, orgId);
+	const configuration = await getConfiguration(configurationId);
+	if (!configuration) {
+		throw new ConfigurationNotFoundError();
+	}
+	return configuration;
+}
+
+export async function createConfigurationForOrg(input: {
+	organizationId: string;
+	userId: string;
+	repoIds: string[];
+	name?: string;
+}): Promise<CreateConfigurationResult> {
+	try {
+		return await createConfiguration(input);
+	} catch (error) {
+		const message = error instanceof Error ? error.message : "Failed to create configuration";
+		if (message === "At least one repo is required") {
+			throw new ConfigurationValidationError(message);
+		}
+		if (message === "One or more repos not found") {
+			throw new ConfigurationNotFoundError(message);
+		}
+		if (message === "Unauthorized access to repo") {
+			throw new ConfigurationForbiddenError(message);
+		}
+		throw error;
+	}
+}
+
+export async function updateConfigurationForOrg(
+	configurationId: string,
+	orgId: string,
+	input: UpdateConfigurationInput,
+): Promise<Configuration> {
+	await assertConfigurationBelongsToOrg(configurationId, orgId);
+	try {
+		await updateConfiguration(configurationId, input);
+	} catch (error) {
+		const message = error instanceof Error ? error.message : "Failed to update configuration";
+		if (message === "No fields to update") {
+			throw new ConfigurationValidationError(message);
+		}
+		throw error;
+	}
+
+	const updated = await getConfiguration(configurationId);
+	if (!updated) {
+		throw new ConfigurationNotFoundError();
+	}
+	return updated;
+}
+
+export async function deleteConfigurationForOrg(
+	configurationId: string,
+	orgId: string,
+): Promise<void> {
+	await assertConfigurationBelongsToOrg(configurationId, orgId);
+	await deleteConfiguration(configurationId);
+}
+
+export async function getConfigurationServiceCommandsForOrg(
+	configurationId: string,
+	orgId: string,
+): Promise<ConfigurationServiceCommand[]> {
+	await assertConfigurationBelongsToOrg(configurationId, orgId);
+	const row = await configurationsDb.getConfigurationServiceCommands(configurationId);
+	return parseConfigurationServiceCommands(row?.serviceCommands);
+}
+
+export async function getConfigurationEnvFilesForOrg(
+	configurationId: string,
+	orgId: string,
+): Promise<unknown | null> {
+	await assertConfigurationBelongsToOrg(configurationId, orgId);
+	const envFiles = await configurationsDb.getConfigurationEnvFiles(configurationId);
+	return envFiles ?? null;
+}
+
+export async function updateConfigurationServiceCommandsForOrg(input: {
+	configurationId: string;
+	orgId: string;
+	updatedBy: string;
+	serviceCommands: ConfigurationServiceCommand[];
+}): Promise<void> {
+	await assertConfigurationBelongsToOrg(input.configurationId, input.orgId);
+	await configurationsDb.updateConfigurationServiceCommands({
+		configurationId: input.configurationId,
+		serviceCommands: input.serviceCommands,
+		updatedBy: input.updatedBy,
+	});
+}
+
+export async function attachRepoForOrg(
+	configurationId: string,
+	repoId: string,
+	orgId: string,
+): Promise<void> {
+	try {
+		await attachRepo(configurationId, repoId, orgId);
+	} catch (error) {
+		const message = error instanceof Error ? error.message : "Failed to attach repo";
+		if (message === "Configuration not found" || message === "Repo not found") {
+			throw new ConfigurationNotFoundError(message);
+		}
+		if (message === "Unauthorized access to repo") {
+			throw new ConfigurationForbiddenError(message);
+		}
+		throw error;
+	}
+}
+
+export async function detachRepoForOrg(
+	configurationId: string,
+	repoId: string,
+	orgId: string,
+): Promise<void> {
+	try {
+		await detachRepo(configurationId, repoId, orgId);
+	} catch (error) {
+		const message = error instanceof Error ? error.message : "Failed to detach repo";
+		if (message === "Configuration not found") {
+			throw new ConfigurationNotFoundError(message);
+		}
+		throw error;
+	}
 }
 
 /**

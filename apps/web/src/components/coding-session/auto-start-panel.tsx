@@ -291,9 +291,10 @@ function TestResultEntry({ entry }: { entry: AutoStartOutputEntry }) {
 
 	return (
 		<div className="rounded-md border border-border/60 overflow-hidden">
-			<button
+			<Button
 				type="button"
-				className="flex items-center gap-2 w-full p-2 text-left hover:bg-muted/30 transition-colors"
+				variant="ghost"
+				className="flex items-center gap-2 w-full p-2 text-left hover:bg-muted/30 h-auto justify-start rounded-none"
 				onClick={() => setExpanded(!expanded)}
 			>
 				{passed ? (
@@ -308,7 +309,7 @@ function TestResultEntry({ entry }: { entry: AutoStartOutputEntry }) {
 				) : (
 					<ChevronRight className="h-3 w-3 text-muted-foreground" />
 				)}
-			</button>
+			</Button>
 			{expanded && (
 				<div className="border-t border-border/40 p-2 space-y-1">
 					{entry.output && (

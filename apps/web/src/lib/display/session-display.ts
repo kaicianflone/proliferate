@@ -36,11 +36,11 @@ export function formatCompactMetrics(metrics: {
 export function getOutcomeDisplay(outcome: string): { label: string; className: string } {
 	switch (outcome) {
 		case "succeeded":
-			return { label: "Succeeded", className: "text-emerald-500" };
+			return { label: "Succeeded", className: "text-success" };
 		case "failed":
 			return { label: "Failed", className: "text-destructive" };
 		case "needs_human":
-			return { label: "Needs attention", className: "text-amber-500" };
+			return { label: "Needs attention", className: "text-warning" };
 		case "completed":
 			return { label: "Completed", className: "text-muted-foreground" };
 		default:

@@ -34,6 +34,13 @@ import {
 
 const logger = getServicesLogger().child({ module: "integrations" });
 
+export class OrganizationNotFoundError extends Error {
+	constructor(message = "Organization not found") {
+		super(message);
+		this.name = "OrganizationNotFoundError";
+	}
+}
+
 // ============================================
 // Types
 // ============================================
@@ -900,7 +907,7 @@ export async function createNangoConnectSession(
 
 	const org = await integrationsDb.getOrganization(orgId);
 	if (!org) {
-		throw new Error("Organization not found");
+		throw new OrganizationNotFoundError();
 	}
 
 	const nango = getNango();

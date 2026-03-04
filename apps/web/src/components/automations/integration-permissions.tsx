@@ -1,6 +1,7 @@
 "use client";
 
 import { PermissionControl } from "@/components/integrations/permission-control";
+import { Button } from "@/components/ui/button";
 import { LinearIcon, SentryIcon, SlackIcon } from "@/components/ui/icons";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -324,27 +325,31 @@ function UnifiedActionRow({
 
 				{/* Action-only rows (no config): inline expand */}
 				{!usePopoverForActions && hasActions && (
-					<button
+					<Button
 						type="button"
+						variant="ghost"
+						size="sm"
 						onClick={() => setExpanded(!expanded)}
-						className="mr-2 flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors"
+						className="mr-2 flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground h-auto p-0"
 					>
 						{row.actions!.length} {row.actions!.length === 1 ? "action" : "actions"}
 						<ChevronDown className={cn("h-3 w-3 transition-transform", expanded && "rotate-180")} />
-					</button>
+					</Button>
 				)}
 
 				{/* Rows with config: "Configure" popover includes config fields + permissions */}
 				{isEnabled && hasConfig && (
 					<Popover open={configOpen} onOpenChange={setConfigOpen}>
 						<PopoverTrigger asChild>
-							<button
+							<Button
 								type="button"
-								className="mr-2 text-xs text-muted-foreground hover:text-foreground transition-colors flex items-center gap-1"
+								variant="ghost"
+								size="sm"
+								className="mr-2 text-xs text-muted-foreground hover:text-foreground flex items-center gap-1 h-auto p-0"
 							>
 								Configure
 								<ChevronRight className="h-3 w-3" />
-							</button>
+							</Button>
 						</PopoverTrigger>
 						<PopoverContent className="w-auto p-3" align="end">
 							<div className="flex flex-col gap-4">
