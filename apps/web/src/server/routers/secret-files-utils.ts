@@ -1,27 +1,28 @@
-import path from "node:path";
-import { ORPCError } from "@orpc/server";
+/**
+ * Secret file path utilities.
+ *
+ * Pure path validation extracted here so unit tests can import it
+ * without pulling in the full services dependency tree.
+ * The canonical service-layer version lives in @proliferate/services secret-files service.
+ */
 
+import path from "node:path";
+
+/**
+ * Normalize and validate a secret file path for sandbox use.
+ * Must be a relative path under the workspace root.
+ */
 export function normalizeSecretFilePathForSandbox(filePath: string): string {
 	const trimmed = filePath.trim();
 	if (!trimmed) {
-		throw new ORPCError("BAD_REQUEST", { message: "Secret file path is required" });
+		throw new Error("Secret file path is required");
 	}
 	if (trimmed.includes("\0")) {
-		throw new ORPCError("BAD_REQUEST", { message: "Secret file path contains invalid characters" });
+		throw new Error("Secret file path contains invalid characters");
 	}
-
 	const normalized = path.posix.normalize(trimmed.replaceAll("\\", "/"));
-	if (
-		normalized.startsWith("/") ||
-		normalized === "." ||
-		normalized === ".." ||
-		normalized.startsWith("../") ||
-		normalized.includes("/../")
-	) {
-		throw new ORPCError("BAD_REQUEST", {
-			message: "Secret file path must be a relative path under workspace",
-		});
+	if (path.posix.isAbsolute(normalized) || normalized.startsWith("..")) {
+		throw new Error("Secret file path must be a relative path under workspace");
 	}
-
 	return normalized;
 }
