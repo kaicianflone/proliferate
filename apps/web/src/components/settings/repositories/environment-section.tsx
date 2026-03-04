@@ -2,8 +2,8 @@
 
 import { Button } from "@/components/ui/button";
 import { LoadingDots } from "@/components/ui/loading-dots";
-import { useSecrets } from "@/hooks/use-secrets";
-import { cn } from "@/lib/utils";
+import { useSecrets } from "@/hooks/org/use-secrets";
+import { cn } from "@/lib/display/utils";
 import { Key } from "lucide-react";
 import Link from "next/link";
 

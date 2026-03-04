@@ -1,7 +1,7 @@
 "use client";
 
-import { useCreateConfiguration } from "@/hooks/use-configurations";
-import { useCreateSession as useCreateSessionMutation } from "@/hooks/use-sessions";
+import { useCreateConfiguration } from "@/hooks/sessions/use-configurations";
+import { useCreateSession as useCreateSessionMutation } from "@/hooks/sessions/use-sessions";
 import { useCallback, useEffect, useRef } from "react";
 
 interface UseCreateSessionFromRepoOptions {

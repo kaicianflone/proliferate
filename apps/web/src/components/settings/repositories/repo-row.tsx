@@ -19,8 +19,8 @@ import {
 	DropdownMenuSeparator,
 	DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { useDeleteRepo } from "@/hooks/org/use-repos";
 import type { BaselineInfo } from "@/hooks/settings/use-repos-list";
-import { useDeleteRepo } from "@/hooks/use-repos";
 import type { Repo } from "@/types";
 import { ExternalLink, MoreVertical, Trash2 } from "lucide-react";
 import Link from "next/link";

@@ -1,6 +1,6 @@
 "use client";
 
-import { useOrgMembers } from "@/hooks/use-orgs";
+import { useOrgMembers } from "@/hooks/org/use-orgs";
 import { useActiveOrganization, useSession } from "@/lib/auth/client";
 
 export function useCurrentUserRole() {

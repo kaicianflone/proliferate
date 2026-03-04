@@ -3,7 +3,7 @@
 import { Button } from "@/components/ui/button";
 import { PageBackLink } from "@/components/ui/page-back-link";
 import { StatusDot } from "@/components/ui/status-dot";
-import { useAutomation } from "@/hooks/use-automations";
+import { useAutomation } from "@/hooks/automations/use-automations";
 import Link from "next/link";
 
 export function LegacyAutomationDetail({ id }: { id: string }) {

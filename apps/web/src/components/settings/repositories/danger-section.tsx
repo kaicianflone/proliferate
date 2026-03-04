@@ -11,7 +11,7 @@ import {
 	AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
-import { useDeleteRepo } from "@/hooks/use-repos";
+import { useDeleteRepo } from "@/hooks/org/use-repos";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 

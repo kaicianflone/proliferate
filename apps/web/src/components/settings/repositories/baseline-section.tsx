@@ -3,7 +3,11 @@
 import { BaselineStatusBadge } from "@/components/settings/repositories/baseline-status-badge";
 import { Button } from "@/components/ui/button";
 import { LoadingDots } from "@/components/ui/loading-dots";
-import { useActiveBaseline, useBaselineTargets, useMarkBaselineStale } from "@/hooks/use-baselines";
+import {
+	useActiveBaseline,
+	useBaselineTargets,
+	useMarkBaselineStale,
+} from "@/hooks/sessions/use-baselines";
 import { formatDateWithYear } from "@/lib/display/format";
 import Link from "next/link";
 

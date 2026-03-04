@@ -3,20 +3,20 @@
 import type { CatalogEntry } from "@/components/integrations/integration-picker-dialog";
 import type { Provider } from "@/components/integrations/provider-icon";
 import { OAUTH_PROVIDERS } from "@/config/integrations";
-import { useGitHubAppConnect } from "@/hooks/use-github-app-connect";
+import { useGitHubAppConnect } from "@/hooks/integrations/use-github-app-connect";
 import {
 	useIntegrations,
 	useSlackConnect,
 	useSlackDisconnect,
 	useSlackStatus,
-} from "@/hooks/use-integrations";
+} from "@/hooks/integrations/use-integrations";
 import {
 	type NangoProvider,
 	getProviderFromIntegrationId,
 	shouldUseNangoForProvider,
 	useNangoConnect,
-} from "@/hooks/use-nango-connect";
-import { orpc } from "@/lib/orpc";
+} from "@/hooks/integrations/use-nango-connect";
+import { orpc } from "@/lib/infra/orpc";
 import type { IntegrationWithCreator } from "@proliferate/shared";
 import { useQueryClient } from "@tanstack/react-query";
 import { useCallback, useMemo, useState } from "react";

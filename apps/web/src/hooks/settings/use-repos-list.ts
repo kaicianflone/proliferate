@@ -1,7 +1,7 @@
 "use client";
 
-import { useActiveBaselinesByRepos } from "@/hooks/use-baselines";
-import { useRepos } from "@/hooks/use-repos";
+import { useRepos } from "@/hooks/org/use-repos";
+import { useActiveBaselinesByRepos } from "@/hooks/sessions/use-baselines";
 import { useMemo } from "react";
 
 export interface BaselineInfo {

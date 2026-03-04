@@ -1,9 +1,9 @@
 "use client";
 
-import { useCreateBaseline } from "@/hooks/use-baselines";
-import { useCreateConfiguration } from "@/hooks/use-configurations";
-import { useCreateSession } from "@/hooks/use-sessions";
-import { orpc } from "@/lib/orpc";
+import { useCreateBaseline } from "@/hooks/sessions/use-baselines";
+import { useCreateConfiguration } from "@/hooks/sessions/use-configurations";
+import { useCreateSession } from "@/hooks/sessions/use-sessions";
+import { orpc } from "@/lib/infra/orpc";
 import { getSetupInitialPrompt } from "@proliferate/shared/prompts";
 import { useQuery } from "@tanstack/react-query";
 import { useCallback, useEffect, useRef, useState } from "react";

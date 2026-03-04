@@ -1,7 +1,7 @@
 "use client";
 
 import { LoadingDots } from "@/components/ui/loading-dots";
-import { useLatestSetupSession } from "@/hooks/use-baselines";
+import { useLatestSetupSession } from "@/hooks/sessions/use-baselines";
 import { formatDateWithYear } from "@/lib/display/format";
 
 export function SetupRunSection({ repoId }: { repoId: string }) {

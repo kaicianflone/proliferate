@@ -1,4 +1,4 @@
-import { cn } from "@/lib/utils";
+import { cn } from "@/lib/display/utils";
 
 const styles: Record<string, string> = {
 	ready: "text-foreground",

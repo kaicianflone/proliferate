@@ -8,7 +8,7 @@ import {
 	getSeverityDotClass,
 	normalizeProvider,
 } from "@/lib/automations/display";
-import { cn } from "@/lib/utils";
+import { cn } from "@/lib/display/utils";
 import type { AutomationRun, ParsedEventContext } from "@proliferate/shared";
 import { Bot } from "lucide-react";
 import Link from "next/link";

@@ -1,6 +1,6 @@
 "use client";
 
-import { useCreateSecret, useDeleteSecret, useSecrets } from "@/hooks/use-secrets";
+import { useCreateSecret, useDeleteSecret, useSecrets } from "@/hooks/org/use-secrets";
 import { useState } from "react";
 
 export function useSecretsForm() {

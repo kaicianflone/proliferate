@@ -16,6 +16,7 @@
 		"./prompts": "./src/agents/prompts.ts",
 		"./gateway": "./src/gateway/protocol.ts",
 		"./verification": "./src/verification.ts",
+		"./contracts": "./src/contracts/index.ts",
 		"./contracts/actions": "./src/contracts/actions.ts",
 		"./contracts/admin": "./src/contracts/admin.ts",
 		"./contracts/auth": "./src/contracts/auth.ts",

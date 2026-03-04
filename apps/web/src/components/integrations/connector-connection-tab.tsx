@@ -2,8 +2,8 @@
 
 import { ConnectorForm } from "@/components/integrations/connector-form";
 import { Button } from "@/components/ui/button";
-import { useUpdateOrgConnector } from "@/hooks/use-org-connectors";
-import { cn } from "@/lib/utils";
+import { useUpdateOrgConnector } from "@/hooks/integrations/use-org-connectors";
+import { cn } from "@/lib/display/utils";
 import type { ConnectorConfig } from "@proliferate/shared";
 import { useState } from "react";
 

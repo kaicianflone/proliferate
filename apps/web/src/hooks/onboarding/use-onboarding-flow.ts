@@ -1,7 +1,7 @@
 "use client";
 
-import { useOnboarding } from "@/hooks/use-onboarding";
-import { orpc } from "@/lib/orpc";
+import { useOnboarding } from "@/hooks/org/use-onboarding";
+import { orpc } from "@/lib/infra/orpc";
 import { type FlowType, useOnboardingStore } from "@/stores/onboarding";
 import { env } from "@proliferate/environment/public";
 import { useMutation } from "@tanstack/react-query";

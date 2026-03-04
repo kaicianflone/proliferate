@@ -2,14 +2,14 @@
 
 import { ConnectionCard } from "@/components/integrations/connection-card";
 import type { Provider } from "@/components/integrations/provider-icon";
-import { useGitHubAppConnect } from "@/hooks/use-github-app-connect";
-import { useIntegrations } from "@/hooks/use-integrations";
+import { useGitHubAppConnect } from "@/hooks/integrations/use-github-app-connect";
+import { useIntegrations } from "@/hooks/integrations/use-integrations";
 import {
 	type NangoProvider,
 	shouldUseNangoForProvider,
 	useNangoConnect,
-} from "@/hooks/use-nango-connect";
-import { orpc } from "@/lib/orpc";
+} from "@/hooks/integrations/use-nango-connect";
+import { orpc } from "@/lib/infra/orpc";
 import { useQueryClient } from "@tanstack/react-query";
 
 interface OAuthConnectionTabProps {

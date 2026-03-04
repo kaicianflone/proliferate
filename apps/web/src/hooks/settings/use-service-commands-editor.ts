@@ -1,6 +1,6 @@
 "use client";
 
-import { useServiceCommands, useUpdateServiceCommands } from "@/hooks/use-repos";
+import { useServiceCommands, useUpdateServiceCommands } from "@/hooks/org/use-repos";
 import { useState } from "react";
 
 export interface CommandDraft {

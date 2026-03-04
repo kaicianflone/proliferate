@@ -1,3 +1,5 @@
+export type CoworkerListTab = "all" | "active" | "paused";
+
 export type DetailTab = "activity" | "sessions" | "settings";
 
 export const DETAIL_TABS: { value: DetailTab; label: string }[] = [

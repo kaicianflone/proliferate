@@ -2,10 +2,10 @@
 
 import type { TemplateEntry } from "@/components/automations/template-picker-dialog";
 import type { CoworkerListTab } from "@/config/coworkers";
-import { useAutomations, useCreateAutomation } from "@/hooks/use-automations";
-import { useIntegrations, useSlackInstallations } from "@/hooks/use-integrations";
-import { useCreateFromTemplate, useTemplateCatalog } from "@/hooks/use-templates";
-import { useCreateWorker, useWorkers } from "@/hooks/use-workers";
+import { useAutomations, useCreateAutomation } from "@/hooks/automations/use-automations";
+import { useCreateWorker, useWorkers } from "@/hooks/automations/use-workers";
+import { useIntegrations, useSlackInstallations } from "@/hooks/integrations/use-integrations";
+import { useCreateFromTemplate, useTemplateCatalog } from "@/hooks/org/use-templates";
 import { useRouter } from "next/navigation";
 import { startTransition, useMemo, useState } from "react";
 

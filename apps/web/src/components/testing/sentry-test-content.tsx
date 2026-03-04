@@ -2,7 +2,7 @@
 
 import { Button } from "@/components/ui/button";
 import { Text } from "@/components/ui/text";
-import { orpc } from "@/lib/orpc";
+import { orpc } from "@/lib/infra/orpc";
 import * as Sentry from "@sentry/nextjs";
 import { toast } from "sonner";
 

@@ -1,7 +1,10 @@
 "use client";
 
 import type { CatalogEntry } from "@/components/integrations/integration-picker-dialog";
-import { useDisabledSourceIds, useToggleActionPreference } from "@/hooks/use-action-preferences";
+import {
+	useDisabledSourceIds,
+	useToggleActionPreference,
+} from "@/hooks/actions/use-action-preferences";
 import type { ConnectorConfig } from "@proliferate/shared";
 import { useCallback } from "react";
 

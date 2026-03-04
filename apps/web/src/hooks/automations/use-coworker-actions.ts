@@ -15,7 +15,7 @@ import {
 	useUpdateWorker,
 	useWorkerRuns,
 	useWorkerSessions,
-} from "@/hooks/use-workers";
+} from "@/hooks/automations/use-workers";
 import { useRouter } from "next/navigation";
 import { useCallback, useMemo } from "react";
 import { toast } from "sonner";

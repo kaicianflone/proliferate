@@ -19,11 +19,11 @@ import {
 	NEEDS_ATTENTION_STATUSES,
 	TABS,
 } from "@/config/sessions";
-import { useOrgPendingRuns } from "@/hooks/use-automations";
-import { useSessions } from "@/hooks/use-sessions";
+import { useOrgPendingRuns } from "@/hooks/automations/use-automations";
+import { useSessions } from "@/hooks/sessions/use-sessions";
 import { useSession } from "@/lib/auth/client";
+import { cn } from "@/lib/display/utils";
 import { getSessionOrigin, sortSessions } from "@/lib/sessions/filters";
-import { cn } from "@/lib/utils";
 import { useDashboardStore } from "@/stores/dashboard";
 import { deriveDisplayStatus } from "@proliferate/shared/sessions";
 import { Plus, Search } from "lucide-react";

@@ -2,9 +2,9 @@
 
 import { PermissionControl } from "@/components/integrations/permission-control";
 import type { Provider } from "@/components/integrations/provider-icon";
-import { useActionModes, useSetActionMode } from "@/hooks/use-action-modes";
-import { ACTION_ADAPTERS, type ActionMeta } from "@/lib/action-adapters";
-import { cn } from "@/lib/utils";
+import { useActionModes, useSetActionMode } from "@/hooks/actions/use-action-modes";
+import { cn } from "@/lib/display/utils";
+import { ACTION_ADAPTERS, type ActionMeta } from "@/lib/integrations/action-adapters";
 import { Shield } from "lucide-react";
 
 interface PermissionsTabProps {

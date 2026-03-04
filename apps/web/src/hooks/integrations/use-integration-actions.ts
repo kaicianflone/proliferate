@@ -5,7 +5,7 @@ import {
 	useDeleteOrgConnector,
 	useOrgConnectors,
 	useUpdateOrgConnector,
-} from "@/hooks/use-org-connectors";
+} from "@/hooks/integrations/use-org-connectors";
 import type { ConnectorConfig } from "@proliferate/shared";
 import { useCallback, useState } from "react";
 
