@@ -3,9 +3,9 @@
 import { RunRow } from "@/components/automations/events/run-row";
 import { Button } from "@/components/ui/button";
 import { PageBackLink } from "@/components/ui/page-back-link";
-import { RUN_STATUS_FILTERS, type RunStatusFilter } from "@/config/coworkers";
-import { useAutomation, useAutomationRuns } from "@/hooks/use-automations";
-import { cn } from "@/lib/utils";
+import { useAutomation, useAutomationRuns } from "@/hooks/automations/use-automations";
+import { RUN_STATUS_FILTERS, type RunStatusFilter } from "@/lib/display/run-status";
+import { cn } from "@/lib/display/utils";
 import { AlertCircle, Inbox, RefreshCw } from "lucide-react";
 import { useSearchParams } from "next/navigation";
 import { use, useEffect, useState } from "react";
@@ -42,6 +42,10 @@ export default function AutomationRunsPage({
 	const total = runsData?.total ?? 0;
 	const runLabel = total === 1 ? "run" : "runs";
 
+	function handleToggleRun(runId: string) {
+		setExpandedRunId((previous) => (previous === runId ? null : runId));
+	}
+
 	return (
 		<div className="bg-background flex flex-col grow min-h-0 overflow-y-auto [scrollbar-gutter:stable_both-edges]">
 			<div className="w-full max-w-5xl mx-auto px-6 py-6">
@@ -68,20 +72,19 @@ export default function AutomationRunsPage({
 
 				<div className="mb-4 flex flex-wrap gap-1">
 					{RUN_STATUS_FILTERS.map((filter) => (
-						<Button
+						<button
 							key={filter.value}
-							variant="ghost"
-							size="sm"
+							type="button"
 							onClick={() => setStatusFilter(filter.value)}
 							className={cn(
-								"rounded-md px-2.5 py-1 text-xs font-medium h-auto",
+								"rounded-md px-2.5 py-1 text-xs font-medium transition-colors",
 								statusFilter === filter.value
 									? "bg-secondary text-foreground"
-									: "text-muted-foreground",
+									: "text-muted-foreground hover:bg-muted/60 hover:text-foreground",
 							)}
 						>
 							{filter.label}
-						</Button>
+						</button>
 					))}
 				</div>
 
@@ -127,9 +130,7 @@ export default function AutomationRunsPage({
 								key={run.id}
 								run={run}
 								isExpanded={expandedRunId === run.id}
-								onToggle={() =>
-									setExpandedRunId((previous) => (previous === run.id ? null : run.id))
-								}
+								onToggle={() => handleToggleRun(run.id)}
 							/>
 						))}
 					</div>

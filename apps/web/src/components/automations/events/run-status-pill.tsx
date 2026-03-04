@@ -1,7 +1,5 @@
-"use client";
-
-import { getRunStatusDisplay } from "@/lib/run-status";
-import { cn } from "@/lib/utils";
+import { getRunStatusDisplay } from "@/lib/display/run-status";
+import { cn } from "@/lib/display/utils";
 import type { AutomationRunStatus } from "@proliferate/shared";
 
 export function RunStatusPill({ status }: { status: AutomationRunStatus }) {

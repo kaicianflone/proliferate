@@ -1,13 +1,14 @@
 "use client";
 
+export const dynamic = "force-dynamic";
+
 import { CodingSession } from "@/components/coding-session/coding-session";
-import { CoworkerBanner } from "@/components/workspace/coworker-banner";
-import { SessionStatusMessage } from "@/components/workspace/session-status-message";
-import { useOrgSwitch } from "@/hooks/org/use-org-switch";
-import { useMarkSessionViewed, useSessionData } from "@/hooks/use-sessions";
+import { useMarkSessionViewed, useSessionData } from "@/hooks/sessions/use-sessions";
+import { organization, useActiveOrganization } from "@/lib/auth/client";
 import { useDashboardStore } from "@/stores/dashboard";
+import { X, Zap } from "lucide-react";
 import { useSearchParams } from "next/navigation";
-import { use, useCallback, useEffect, useState } from "react";
+import { use, useEffect, useMemo, useState } from "react";
 
 export default function SessionDetailPage({
 	params,
@@ -20,23 +21,33 @@ export default function SessionDetailPage({
 	useMarkSessionViewed(id);
 	const searchParams = useSearchParams();
 	const targetOrgId = searchParams.get("orgId");
+	const { data: activeOrg, isPending: isOrgPending } = useActiveOrganization();
+	const [switchError, setSwitchError] = useState<string | null>(null);
+	const [isSwitching, setIsSwitching] = useState(false);
 	const runId = searchParams.get("runId");
 	const fromCoworker = searchParams.get("from") === "coworker";
 	const [showCoworkerBanner, setShowCoworkerBanner] = useState(fromCoworker && !runId);
-
-	const buildRedirectUrl = useCallback(
-		(orgId: string) => {
-			const params = new URLSearchParams({ orgId });
-			if (runId) params.set("runId", runId);
-			return `/workspace/${id}?${params.toString()}`;
-		},
-		[id, runId],
+	const shouldSwitchOrg = useMemo(
+		() => Boolean(targetOrgId && activeOrg?.id && activeOrg.id !== targetOrgId),
+		[targetOrgId, activeOrg?.id],
 	);
 
-	const { isSwitching, isOrgPending, shouldSwitchOrg, switchError } = useOrgSwitch({
-		targetOrgId,
-		buildRedirectUrl,
-	});
+	useEffect(() => {
+		if (!targetOrgId || isOrgPending || isSwitching || !shouldSwitchOrg) return;
+		setIsSwitching(true);
+		organization
+			.setActive({ organizationId: targetOrgId })
+			.then(() => {
+				const params = new URLSearchParams({ orgId: targetOrgId });
+				if (runId) params.set("runId", runId);
+				window.location.replace(`/workspace/${id}?${params.toString()}`);
+			})
+			.catch((err) => {
+				console.error("Failed to switch organization:", err);
+				setSwitchError("Unable to switch organization for this session.");
+				setIsSwitching(false);
+			});
+	}, [targetOrgId, isOrgPending, isSwitching, shouldSwitchOrg, id, runId]);
 
 	// Sync active session ID with URL
 	useEffect(() => {
@@ -44,22 +55,43 @@ export default function SessionDetailPage({
 	}, [id, setActiveSession]);
 
 	if (targetOrgId && (isOrgPending || shouldSwitchOrg || isSwitching)) {
-		return <SessionStatusMessage message="Switching organization..." />;
+		return (
+			<div className="h-full flex items-center justify-center text-sm text-muted-foreground">
+				Switching organization...
+			</div>
+		);
 	}
 
 	if (switchError) {
-		return <SessionStatusMessage message={switchError} variant="destructive" />;
+		return (
+			<div className="h-full flex items-center justify-center text-sm text-destructive">
+				{switchError}
+			</div>
+		);
 	}
 
 	return (
 		<div className="flex-1 min-h-0 flex flex-col">
-			{showCoworkerBanner && <CoworkerBanner onDismiss={() => setShowCoworkerBanner(false)} />}
+			{showCoworkerBanner && (
+				<div className="flex items-center gap-2 px-4 py-2 bg-muted/60 border-b border-border text-sm text-muted-foreground shrink-0">
+					<Zap className="h-3.5 w-3.5" />
+					<span>Resumed from Coworker</span>
+					<button
+						type="button"
+						onClick={() => setShowCoworkerBanner(false)}
+						className="ml-auto text-muted-foreground/60 hover:text-foreground transition-colors"
+					>
+						<X className="h-3.5 w-3.5" />
+					</button>
+				</div>
+			)}
 			<div className="flex-1 min-h-0 flex flex-col">
 				<CodingSession
 					sessionId={id}
 					runId={runId ?? undefined}
 					initialPrompt={pendingPrompt || sessionData?.initialPrompt || undefined}
-					onError={(_error) => {
+					onError={(error) => {
+						console.error("Session error:", error);
 						clearPendingPrompt();
 					}}
 				/>

@@ -1,5 +1,7 @@
 "use client";
 
+export const dynamic = "force-dynamic";
+
 import { StepBilling } from "@/components/onboarding/step-billing";
 import { StepComplete } from "@/components/onboarding/step-complete";
 import { StepCreateOrg } from "@/components/onboarding/step-create-org";
@@ -7,52 +9,47 @@ import { StepInviteMembers } from "@/components/onboarding/step-invite-members";
 import { StepPathChoice } from "@/components/onboarding/step-path-choice";
 import { StepQuestionnaire } from "@/components/onboarding/step-questionnaire";
 import { StepToolSelection } from "@/components/onboarding/step-tool-selection";
-import { useOnboardingFlow } from "@/hooks/onboarding/use-onboarding-flow";
+import { useOnboardingFlow } from "@/hooks/org/use-onboarding-flow";
 
 export default function OnboardingPage() {
 	const {
 		step,
 		billingEnabled,
-		saveToolsMutation,
-		saveQuestionnaireMutation,
-		markCompleteMutation,
-		handlePathSelect,
-		handleOrgCreated,
-		handleQuestionnaireComplete,
-		handleToolsComplete,
-		handleInviteComplete,
-		handleBillingComplete,
-		handleFinish,
+		isFinishing,
+		isQuestionnaireSubmitting,
+		isToolsSubmitting,
+		isFinishSubmitting,
+		finishError,
+		onPathSelect,
+		onOrgCreated,
+		onQuestionnaireComplete,
+		onToolsComplete,
+		onInviteComplete,
+		onBillingComplete,
+		onFinish,
 	} = useOnboardingFlow();
 
-	if (markCompleteMutation.isSuccess) {
+	if (isFinishing) {
 		return null;
 	}
 
 	return (
 		<div key={step} className="animate-in fade-in duration-300">
-			{step === "path" && <StepPathChoice onSelect={handlePathSelect} />}
-			{step === "create-org" && <StepCreateOrg onComplete={handleOrgCreated} />}
+			{step === "path" && <StepPathChoice onSelect={onPathSelect} />}
+			{step === "create-org" && <StepCreateOrg onComplete={onOrgCreated} />}
 			{step === "questionnaire" && (
 				<StepQuestionnaire
-					onComplete={handleQuestionnaireComplete}
-					isSubmitting={saveQuestionnaireMutation.isPending}
+					onComplete={onQuestionnaireComplete}
+					isSubmitting={isQuestionnaireSubmitting}
 				/>
 			)}
 			{step === "tools" && (
-				<StepToolSelection
-					onComplete={handleToolsComplete}
-					isSubmitting={saveToolsMutation.isPending}
-				/>
+				<StepToolSelection onComplete={onToolsComplete} isSubmitting={isToolsSubmitting} />
 			)}
-			{step === "invite" && <StepInviteMembers onComplete={handleInviteComplete} />}
-			{step === "billing" && billingEnabled && <StepBilling onComplete={handleBillingComplete} />}
+			{step === "invite" && <StepInviteMembers onComplete={onInviteComplete} />}
+			{step === "billing" && billingEnabled && <StepBilling onComplete={onBillingComplete} />}
 			{step === "complete" && (
-				<StepComplete
-					onComplete={handleFinish}
-					isSubmitting={markCompleteMutation.isPending}
-					error={markCompleteMutation.error?.message}
-				/>
+				<StepComplete onComplete={onFinish} isSubmitting={isFinishSubmitting} error={finishError} />
 			)}
 		</div>
 	);
