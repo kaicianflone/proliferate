@@ -11,7 +11,7 @@
 
 import { randomUUID } from "crypto";
 import { type Logger, createLogger } from "@proliferate/logger";
-import { configurations, sessions } from "@proliferate/services";
+import { sessions } from "@proliferate/services";
 import type {
 	ClientMessage,
 	ClientSource,
@@ -19,30 +19,43 @@ import type {
 	Message,
 	SandboxProviderType,
 	ServerMessage,
-	SessionEventMessage,
-	SnapshotResultMessage,
 } from "@proliferate/shared";
 import type { SessionRuntimeStatus } from "@proliferate/shared/contracts/sessions";
 import { getSandboxProvider } from "@proliferate/shared/providers";
 import type { WebSocket } from "ws";
 import type { RuntimeDaemonEvent } from "../harness/contracts/coding";
 import type { GatewayEnv } from "../lib/env";
-import { publishSessionEvent } from "../lib/redis";
 import { uploadVerificationFiles } from "../lib/s3";
-import {
-	OWNER_LEASE_TTL_MS,
-	acquireOwnerLease,
-	clearRuntimeLease,
-	releaseOwnerLease,
-	renewOwnerLease,
-	setRuntimeLease,
-} from "../lib/session-leases";
+import { OWNER_LEASE_TTL_MS, setRuntimeLease } from "../lib/session-leases";
 import type { ClientConnection, OpenCodeEvent, SandboxInfo } from "../types";
 import { MigrationInProgressError, SessionRuntime } from "./session-runtime";
-import { buildControlPlaneSnapshot, buildInitConfig } from "./session/control-plane";
 import { GitOperations } from "./session/git/git-operations";
+import {
+	type IdleControllerDeps,
+	type IdleControllerState,
+	addProxyConnection as addProxyConnectionState,
+	clearAgentIdle,
+	markAgentIdle,
+	shouldIdleSnapshot as shouldIdleSnapshotState,
+	startIdleMonitor as startIdleMonitorState,
+	stopIdleMonitor as stopIdleMonitorState,
+	touchActivity as touchIdleActivity,
+	trackToolCallEnd as trackToolCallEndState,
+	trackToolCallStart as trackToolCallStartState,
+} from "./session/idle/idle-controller";
+import {
+	type OwnerLeaseControllerDeps,
+	type OwnerLeaseControllerState,
+	startOwnerLeaseRenewal,
+	stopOwnerLeaseRenewal,
+} from "./session/leases/owner-lease-controller";
 import { MigrationController } from "./session/migration/migration-controller";
-import { prepareForSnapshot } from "./session/migration/snapshot-scrub";
+import {
+	type ReconnectControllerDeps,
+	type ReconnectControllerState,
+	cancelReconnect as cancelReconnectState,
+	scheduleReconnect as scheduleReconnectState,
+} from "./session/reconnect/reconnect-controller";
 import { EventProcessor } from "./session/runtime/event-processor";
 import type { SessionContext, SessionRecord } from "./session/runtime/session-context-store";
 import { SessionTelemetry, extractPrUrls } from "./session/runtime/session-telemetry";
@@ -51,6 +64,13 @@ import {
 	recordLifecycleEvent,
 	touchLastVisibleUpdate,
 } from "./session/session-lifecycle";
+import { runCancelWorkflow } from "./session/workflows/cancel-workflow";
+import { runGitActionWorkflow, runGitStatusWorkflow } from "./session/workflows/git-workflow";
+import { buildInitMessages } from "./session/workflows/init-workflow";
+import { runPromptWorkflow } from "./session/workflows/prompt-workflow";
+import { runSaveSnapshotWorkflow } from "./session/workflows/snapshot-workflow";
+import { SESSION_LIFECYCLE_EVENT } from "./shared/lifecycle-events";
+import type { HubStatus, HubStatusOrNull } from "./shared/status";
 import type { PromptOptions } from "./shared/types";
 
 interface HubDependencies {
@@ -93,15 +113,7 @@ export class SessionHub {
 	private reconnectAttempt = 0;
 	private reconnectTimerId: ReturnType<typeof setTimeout> | null = null;
 	private reconnectGeneration = 0;
-	private latestBroadcastStatus:
-		| "creating"
-		| "resuming"
-		| "running"
-		| "paused"
-		| "stopped"
-		| "error"
-		| "migrating"
-		| null = null;
+	private latestBroadcastStatus: HubStatusOrNull = null;
 
 	// Session leases
 	private leaseRenewTimer: ReturnType<typeof setInterval> | null = null;
@@ -617,8 +629,7 @@ export class SessionHub {
 	 * Called by tool routes when a tool execution starts.
 	 */
 	trackToolCallStart(): void {
-		this.activeHttpToolCalls++;
-		this.touchActivity();
+		trackToolCallStartState(this.getIdleControllerState());
 	}
 
 	/**
@@ -626,8 +637,7 @@ export class SessionHub {
 	 * Called by tool routes when a tool execution completes.
 	 */
 	trackToolCallEnd(): void {
-		this.activeHttpToolCalls = Math.max(0, this.activeHttpToolCalls - 1);
-		this.touchActivity();
+		trackToolCallEndState(this.getIdleControllerState());
 	}
 
 	/**
@@ -635,16 +645,7 @@ export class SessionHub {
 	 * Returns an idempotent cleanup function.
 	 */
 	addProxyConnection(): () => void {
-		const connectionId = randomUUID();
-		this.proxyConnections.add(connectionId);
-		this.touchActivity();
-		let removed = false;
-		return () => {
-			if (removed) return;
-			removed = true;
-			this.proxyConnections.delete(connectionId);
-			this.touchActivity();
-		};
+		return addProxyConnectionState(this.getIdleControllerState());
 	}
 
 	/**
@@ -652,30 +653,7 @@ export class SessionHub {
 	 * grace period, clients/proxies, agent idle, SSE state, and sandbox existence.
 	 */
 	shouldIdleSnapshot(): boolean {
-		const session = this.runtime.getContext().session;
-		const clientType = session.client_type ?? null;
-		// Automation sessions are worker-driven and must not be idled by WS heuristics.
-		if (clientType === "automation") return false;
-		// Manager sessions run a harness loop — never idle-snapshot them.
-		if (session.kind === "manager") return false;
-
-		if (this.activeHttpToolCalls > 0) return false;
-		if (this.eventProcessor.hasRunningTools()) return false;
-		if (this.clients.size > 0) return false;
-		if (this.proxyConnections.size > 0) return false;
-		const assistantMessageOpen = this.eventProcessor.getCurrentAssistantMessageId() !== null;
-		if (assistantMessageOpen && this.lastKnownAgentIdleAt === null) return false;
-
-		const sseReady = this.runtime.isReady();
-		if (!sseReady && this.lastKnownAgentIdleAt === null) return false;
-
-		const hasSandbox = Boolean(this.runtime.getContext().session.sandbox_id);
-		if (!hasSandbox) return false;
-
-		const graceMs = this.getIdleGraceMs();
-		if (Date.now() - this.lastActivityAt < graceMs) return false;
-
-		return true;
+		return shouldIdleSnapshotState(this.getIdleControllerState(), this.getIdleControllerDeps());
 	}
 
 	private getIdleGraceMs(): number {
@@ -684,6 +662,121 @@ export class SessionHub {
 			return 30_000;
 		}
 		return this.env.idleSnapshotGraceSeconds * 1000;
+	}
+
+	private getOwnerLeaseControllerState(): OwnerLeaseControllerState {
+		const self = this;
+		return {
+			get leaseRenewTimer() {
+				return self.leaseRenewTimer;
+			},
+			set leaseRenewTimer(value) {
+				self.leaseRenewTimer = value;
+			},
+			get lastLeaseRenewAt() {
+				return self.lastLeaseRenewAt;
+			},
+			set lastLeaseRenewAt(value) {
+				self.lastLeaseRenewAt = value;
+			},
+			get ownsOwnerLease() {
+				return self.ownsOwnerLease;
+			},
+			set ownsOwnerLease(value) {
+				self.ownsOwnerLease = value;
+			},
+		};
+	}
+
+	private getOwnerLeaseControllerDeps(): OwnerLeaseControllerDeps {
+		return {
+			sessionId: this.sessionId,
+			instanceId: this.instanceId,
+			renewIntervalMs: LEASE_RENEW_INTERVAL_MS,
+			logger: this.logger,
+			onSelfTerminate: () => this.selfTerminate(),
+		};
+	}
+
+	private getReconnectControllerState(): ReconnectControllerState {
+		const self = this;
+		return {
+			get reconnectAttempt() {
+				return self.reconnectAttempt;
+			},
+			set reconnectAttempt(value) {
+				self.reconnectAttempt = value;
+			},
+			get reconnectTimerId() {
+				return self.reconnectTimerId;
+			},
+			set reconnectTimerId(value) {
+				self.reconnectTimerId = value;
+			},
+			get reconnectGeneration() {
+				return self.reconnectGeneration;
+			},
+			set reconnectGeneration(value) {
+				self.reconnectGeneration = value;
+			},
+		};
+	}
+
+	private getReconnectControllerDeps(): ReconnectControllerDeps {
+		return {
+			reconnectDelaysMs: this.env.reconnectDelaysMs,
+			logger: this.logger,
+			getClientCount: () => this.clients.size,
+			ensureRuntimeReady: (options) => this.ensureRuntimeReady(options),
+		};
+	}
+
+	private getIdleControllerState(): IdleControllerState {
+		const self = this;
+		return {
+			get activeHttpToolCalls() {
+				return self.activeHttpToolCalls;
+			},
+			set activeHttpToolCalls(value) {
+				self.activeHttpToolCalls = value;
+			},
+			get idleCheckTimer() {
+				return self.idleCheckTimer;
+			},
+			set idleCheckTimer(value) {
+				self.idleCheckTimer = value;
+			},
+			get lastActivityAt() {
+				return self.lastActivityAt;
+			},
+			set lastActivityAt(value) {
+				self.lastActivityAt = value;
+			},
+			get lastKnownAgentIdleAt() {
+				return self.lastKnownAgentIdleAt;
+			},
+			set lastKnownAgentIdleAt(value) {
+				self.lastKnownAgentIdleAt = value;
+			},
+			proxyConnections: self.proxyConnections,
+		};
+	}
+
+	private getIdleControllerDeps(): IdleControllerDeps {
+		return {
+			checkIntervalMs: 30_000,
+			getClientType: () => this.runtime.getContext().session.client_type ?? null,
+			getSessionKind: () => this.runtime.getContext().session.kind || null,
+			getClientCount: () => this.clients.size,
+			getHasRunningTools: () => this.eventProcessor.hasRunningTools(),
+			getCurrentAssistantMessageId: () => this.eventProcessor.getCurrentAssistantMessageId(),
+			isRuntimeReady: () => this.runtime.isReady(),
+			hasSandbox: () => Boolean(this.runtime.getContext().session.sandbox_id),
+			getIdleGraceMs: () => this.getIdleGraceMs(),
+			logInfo: (message) => this.log(message),
+			logError: (message, error) => this.logError(message, error),
+			runIdleSnapshot: () => this.migrationController.runIdleSnapshot(),
+		};
 	}
 
 	// ============================================
@@ -703,14 +796,14 @@ export class SessionHub {
 			this.stopLeaseRenewal();
 			throw err;
 		}
-		this.lastKnownAgentIdleAt = null; // fresh sandbox, agent state unknown
+		clearAgentIdle(this.getIdleControllerState()); // fresh sandbox, agent state unknown
 		this.telemetry.startRunning(); // idempotent: only sets if not already running
 		this.startMigrationMonitor();
 		await setRuntimeLease(this.sessionId);
 
 		// K5: Record session started event
 		const orgId = this.runtime.getContext().session.organization_id;
-		recordLifecycleEvent(this.sessionId, "session_started", this.logger);
+		recordLifecycleEvent(this.sessionId, SESSION_LIFECYCLE_EVENT.STARTED, this.logger);
 
 		// K4: Project operator status to "active"
 		projectOperatorStatus({
@@ -769,66 +862,14 @@ export class SessionHub {
 	async saveSnapshot(
 		message?: string,
 	): Promise<{ snapshotId: string; target: "configuration" | "session" }> {
-		const context = this.runtime.getContext();
-		if (!context.session.sandbox_id) {
-			throw new Error("No sandbox to snapshot");
-		}
-
-		const isSetupSession = context.session.session_type === "setup";
-		const target = isSetupSession ? "configuration" : "session";
-
-		const startTime = Date.now();
-		this.log("Saving snapshot", { target, message });
-
-		const providerType = context.session.sandbox_provider as SandboxProviderType;
-		const provider = getSandboxProvider(providerType);
-		const sandboxId = context.session.sandbox_id;
-
-		const finalizeSnapshotPrep = await prepareForSnapshot({
-			provider,
-			sandboxId,
-			configurationId: context.session.configuration_id,
+		return runSaveSnapshotWorkflow({
+			sessionId: this.sessionId,
+			context: this.runtime.getContext(),
+			message,
 			logger: this.logger,
-			logContext: "manual_snapshot",
-			failureMode: "throw",
-			reapplyAfterCapture: true,
+			broadcast: (resultMessage) => this.broadcast(resultMessage),
+			log: (logMessage, data) => this.log(logMessage, data),
 		});
-
-		let result: { snapshotId: string };
-		try {
-			result = await provider.snapshot(this.sessionId, sandboxId);
-		} finally {
-			await finalizeSnapshotPrep();
-		}
-
-		const providerMs = Date.now() - startTime;
-		this.log(`[Timing] +${providerMs}ms provider.snapshot complete`);
-
-		if (isSetupSession) {
-			if (!context.session.configuration_id) {
-				throw new Error("Setup session has no configuration");
-			}
-			await configurations.update(context.session.configuration_id, {
-				snapshotId: result.snapshotId,
-				status: "ready",
-			});
-		} else {
-			await sessions.updateSession(this.sessionId, {
-				snapshotId: result.snapshotId,
-			});
-		}
-		const totalMs = Date.now() - startTime;
-		this.log(
-			`[Timing] +${totalMs}ms snapshot complete (provider: ${providerMs}ms, db: ${totalMs - providerMs}ms)`,
-		);
-
-		const resultMessage: SnapshotResultMessage = {
-			type: "snapshot_result",
-			payload: { success: true, snapshotId: result.snapshotId, target },
-		};
-		this.broadcast(resultMessage);
-
-		return { snapshotId: result.snapshotId, target };
 	}
 
 	/**
@@ -908,78 +949,14 @@ export class SessionHub {
 	// ============================================
 
 	private async startLeaseRenewal(): Promise<void> {
-		if (this.leaseRenewTimer) {
-			return;
-		}
-
-		// Acquire initial lease — fail fast if another instance owns this session
-		const acquired = await acquireOwnerLease(this.sessionId, this.instanceId);
-		if (!acquired) {
-			this.logger.error("Failed to acquire owner lease — another instance owns this session");
-			throw new Error("Session is owned by another instance");
-		}
-		this.ownsOwnerLease = true;
-
-		this.lastLeaseRenewAt = Date.now();
-
-		this.leaseRenewTimer = setInterval(() => {
-			const now = Date.now();
-
-			// Split-brain detection: if event loop lagged beyond the TTL,
-			// another instance may have taken over. Self-terminate.
-			if (now - this.lastLeaseRenewAt > OWNER_LEASE_TTL_MS) {
-				this.logger.error(
-					{
-						lastRenewAt: this.lastLeaseRenewAt,
-						lag: now - this.lastLeaseRenewAt,
-						ttl: OWNER_LEASE_TTL_MS,
-					},
-					"Split-brain detected: event loop lag exceeds lease TTL, self-terminating hub",
-				);
-				this.selfTerminate();
-				return;
-			}
-
-			this.lastLeaseRenewAt = now;
-
-			renewOwnerLease(this.sessionId, this.instanceId)
-				.then((renewed) => {
-					if (!renewed) {
-						this.ownsOwnerLease = false;
-						this.logger.error("Owner lease lost during renewal, self-terminating");
-						this.selfTerminate();
-					}
-				})
-				.catch((err) => {
-					this.logger.error({ err }, "Failed to renew owner lease");
-				});
-
-			// Also renew runtime lease
-			setRuntimeLease(this.sessionId).catch((err) => {
-				this.logger.error({ err }, "Failed to renew runtime lease");
-			});
-		}, LEASE_RENEW_INTERVAL_MS);
+		await startOwnerLeaseRenewal(
+			this.getOwnerLeaseControllerState(),
+			this.getOwnerLeaseControllerDeps(),
+		);
 	}
 
 	private stopLeaseRenewal(): void {
-		if (this.leaseRenewTimer) {
-			clearInterval(this.leaseRenewTimer);
-			this.leaseRenewTimer = null;
-		}
-
-		// Never clear shared runtime lease state unless this hub actually held ownership.
-		if (!this.ownsOwnerLease) {
-			return;
-		}
-		this.ownsOwnerLease = false;
-
-		// Release leases
-		releaseOwnerLease(this.sessionId, this.instanceId).catch((err) => {
-			this.logger.error({ err }, "Failed to release owner lease");
-		});
-		clearRuntimeLease(this.sessionId).catch((err) => {
-			this.logger.error({ err }, "Failed to clear runtime lease");
-		});
+		stopOwnerLeaseRenewal(this.getOwnerLeaseControllerState(), this.getOwnerLeaseControllerDeps());
 	}
 
 	/**
@@ -1014,7 +991,7 @@ export class SessionHub {
 	// ============================================
 
 	touchActivity(): void {
-		this.lastActivityAt = Date.now();
+		touchIdleActivity(this.getIdleControllerState());
 	}
 
 	/**
@@ -1022,37 +999,11 @@ export class SessionHub {
 	 * Called once when the runtime becomes ready. Safe to call multiple times.
 	 */
 	private startIdleMonitor(): void {
-		if (this.idleCheckTimer) {
-			return;
-		}
-
-		this.idleCheckTimer = setInterval(() => {
-			this.checkIdleSnapshot();
-		}, 30_000);
+		startIdleMonitorState(this.getIdleControllerState(), this.getIdleControllerDeps());
 	}
 
 	private stopIdleMonitor(): void {
-		if (this.idleCheckTimer) {
-			clearInterval(this.idleCheckTimer);
-			this.idleCheckTimer = null;
-		}
-	}
-
-	private checkIdleSnapshot(): void {
-		if (!this.shouldIdleSnapshot()) {
-			return;
-		}
-
-		this.log("Idle snapshot conditions met, running idle snapshot");
-		this.migrationController
-			.runIdleSnapshot()
-			.then(() => {
-				this.log("Idle snapshot complete");
-				this.lastKnownAgentIdleAt = null;
-			})
-			.catch((err) => {
-				this.logError("Idle snapshot failed", err);
-			});
+		stopIdleMonitorState(this.getIdleControllerState());
 	}
 
 	/**
@@ -1072,106 +1023,43 @@ export class SessionHub {
 		userId: string,
 		options?: PromptOptions,
 	): Promise<void> {
-		if (this.isCompletedAutomationSession()) {
-			throw new Error("Cannot send messages to a completed automation session.");
-		}
-
-		// Block prompts during migration
-		const migrationState = this.migrationController.getState();
-		if (migrationState !== "normal") {
-			this.log("Dropping prompt during migration", { migrationState });
-			return;
-		}
-
-		this.touchActivity();
-		const wasIdle = this.lastKnownAgentIdleAt !== null;
-		this.lastKnownAgentIdleAt = null; // new work starting, invalidates previous idle state
-
-		// K4: Project active when transitioning from idle to working
-		if (wasIdle) {
-			const orgId = this.runtime.getContext().session.organization_id;
-			void projectOperatorStatus({
-				sessionId: this.sessionId,
-				organizationId: orgId,
-				runtimeStatus: "running",
-				hasPendingApproval: false,
-				isAgentIdle: false,
-				logger: this.logger,
-			});
-		}
-
-		this.log("Handling prompt", {
-			userId,
-			contentLength: content.length,
-			source: options?.source,
-			imageCount: options?.images?.length,
-		});
-
 		const ensureStartMs = Date.now();
-		await this.ensureRuntimeReady();
-		this.logger.debug({ durationMs: Date.now() - ensureStartMs }, "prompt.ensure_runtime_ready");
-
-		const openCodeSessionId = this.runtime.getOpenCodeSessionId();
-		const openCodeUrl = this.runtime.getOpenCodeUrl();
-
-		if (!openCodeSessionId || !openCodeUrl) {
-			throw new Error("Agent session unavailable");
-		}
-
-		// Build user message
-		const parts: Message["parts"] = [];
-		if (options?.images && options.images.length > 0) {
-			for (const img of options.images) {
-				parts.push({ type: "image", image: `data:${img.mediaType};base64,${img.data}` });
-			}
-		}
-		parts.push({ type: "text", text: content });
-
-		const userMessage: Message = {
-			id: randomUUID(),
-			role: "user",
-			content,
-			isComplete: true,
-			createdAt: Date.now(),
-			senderId: userId,
-			source: options?.source,
-			parts,
-		};
-		this.broadcast({ type: "message", payload: userMessage });
-		this.telemetry.recordUserPrompt();
-		this.log("User message broadcast", { messageId: userMessage.id });
-
-		// Publish to Redis for async clients
-		const context = this.runtime.getContext();
-		if (context.session.client_type) {
-			const event: SessionEventMessage = {
-				type: "user_message",
-				sessionId: this.sessionId,
-				source: options?.source || "web",
-				timestamp: Date.now(),
-				content,
-				userId,
-			};
-			publishSessionEvent(event).catch((err) => {
-				this.logError("Failed to publish session event", err);
-			});
-		}
-
-		// Reset event processor state for new prompt
-		this.eventProcessor.resetForNewPrompt();
-
-		this.log("Sending prompt to OpenCode...");
-		const sendStartMs = Date.now();
-		await this.runtime.sendPrompt(content, options?.images);
-		this.log("Prompt sent to OpenCode");
-		this.logger.debug(
+		await runPromptWorkflow(
 			{
-				durationMs: Date.now() - sendStartMs,
-				contentLength: content.length,
-				imageCount: options?.images?.length || 0,
+				sessionId: this.sessionId,
+				isCompletedAutomationSession: () => this.isCompletedAutomationSession(),
+				getMigrationState: () => this.migrationController.getState(),
+				touchActivity: () => this.touchActivity(),
+				getLastKnownAgentIdleAt: () => this.lastKnownAgentIdleAt,
+				clearAgentIdle: () => clearAgentIdle(this.getIdleControllerState()),
+				projectActiveStatusFromIdle: () => {
+					const orgId = this.runtime.getContext().session.organization_id;
+					void projectOperatorStatus({
+						sessionId: this.sessionId,
+						organizationId: orgId,
+						runtimeStatus: "running",
+						hasPendingApproval: false,
+						isAgentIdle: false,
+						logger: this.logger,
+					});
+				},
+				log: (message, data) => this.log(message, data),
+				logError: (message, error) => this.logError(message, error),
+				ensureRuntimeReady: () => this.ensureRuntimeReady(),
+				getOpenCodeSessionId: () => this.runtime.getOpenCodeSessionId(),
+				getOpenCodeUrl: () => this.runtime.getOpenCodeUrl(),
+				broadcast: (message) => this.broadcast(message),
+				recordUserPromptTelemetry: () => this.telemetry.recordUserPrompt(),
+				getSessionClientType: () => this.runtime.getContext().session.client_type ?? null,
+				resetEventProcessorForNewPrompt: () => this.eventProcessor.resetForNewPrompt(),
+				sendPromptToRuntime: (promptContent, images) =>
+					this.runtime.sendPrompt(promptContent, images),
 			},
-			"prompt.send_prompt_async",
+			content,
+			userId,
+			options,
 		);
+		this.logger.debug({ durationMs: Date.now() - ensureStartMs }, "prompt.ensure_runtime_ready");
 	}
 
 	private async handleRunAutoStart(runId: string, inlineCommands?: unknown): Promise<void> {
@@ -1189,41 +1077,28 @@ export class SessionHub {
 	}
 
 	private async handleCancel(): Promise<void> {
-		this.log("Handling cancel request");
-		try {
-			await this.ensureRuntimeReady();
-		} catch (err) {
-			if (err instanceof MigrationInProgressError) {
-				this.broadcastStatus("migrating", "Extending session...");
-				return;
-			}
-			throw err;
-		}
-
-		if (!this.runtime.getOpenCodeUrl() || !this.runtime.getOpenCodeSessionId()) {
-			this.log("No OpenCode session to cancel");
-			return;
-		}
-
-		try {
-			await this.runtime.interruptCurrentRun();
-			this.log("OpenCode session aborted");
-		} catch (err) {
-			this.logError("OpenCode abort failed", err);
-		}
-
-		// Broadcast cancelled
-		const messageId = this.eventProcessor.getCurrentAssistantMessageId();
-		this.broadcast({
-			type: "message_cancelled",
-			payload: { messageId: messageId || undefined },
+		await runCancelWorkflow({
+			ensureRuntimeReady: () => this.ensureRuntimeReady(),
+			onMigrationInProgress: () => this.broadcastStatus("migrating", "Extending session..."),
+			getOpenCodeUrl: () => this.runtime.getOpenCodeUrl(),
+			getOpenCodeSessionId: () => this.runtime.getOpenCodeSessionId(),
+			interruptCurrentRun: () => this.runtime.interruptCurrentRun(),
+			getCurrentAssistantMessageId: () => this.eventProcessor.getCurrentAssistantMessageId(),
+			clearCurrentAssistantMessageId: () => this.eventProcessor.clearCurrentAssistantMessageId(),
+			broadcastCancelled: (messageId) => {
+				this.broadcast({
+					type: "message_cancelled",
+					payload: { messageId },
+				});
+			},
+			log: (message, data) => this.log(message, data),
+			logError: (message, error) => this.logError(message, error),
+			isMigrationInProgressError: (error) => error instanceof MigrationInProgressError,
 		});
-		this.log("Message cancelled", { messageId });
-		this.eventProcessor.clearCurrentAssistantMessageId();
 	}
 
 	private handleGetStatus(ws: WebSocket): void {
-		let status: "creating" | "resuming" | "running" | "paused" | "stopped" | "error" | "migrating";
+		let status: HubStatus;
 		if (this.isCompletedAutomationSession()) {
 			status = "paused";
 		} else if (this.migrationController.getState() === "migrating") {
@@ -1294,14 +1169,17 @@ export class SessionHub {
 	}
 
 	private async handleGitStatus(ws: WebSocket, workspacePath?: string): Promise<void> {
-		await this.ensureRuntimeReady();
-		try {
-			await this.runtime.refreshGitContext();
-		} catch (err) {
-			this.logError("Failed to refresh git context (using cached values)", err);
-		}
-		const status = await this.getGitOps().getStatus(workspacePath);
-		this.sendMessage(ws, { type: "git_status", payload: status });
+		await runGitStatusWorkflow(
+			{
+				ensureRuntimeReady: () => this.ensureRuntimeReady(),
+				refreshGitContext: () => this.runtime.refreshGitContext(),
+				getGitOps: () => this.getGitOps(),
+				sendMessage: (socket, message) => this.sendMessage(socket, message as ServerMessage),
+				logError: (message, error) => this.logError(message, error),
+			},
+			ws,
+			workspacePath,
+		);
 	}
 
 	private async handleGitAction(
@@ -1310,34 +1188,22 @@ export class SessionHub {
 		fn: () => Promise<{ success: boolean; code: GitResultCode; message: string; prUrl?: string }>,
 		workspacePath?: string,
 	): Promise<void> {
-		await this.ensureRuntimeReady();
-		try {
-			await this.runtime.refreshGitContext();
-		} catch (err) {
-			this.logError("Failed to refresh git context (using cached values)", err);
-		}
-		try {
-			const result = await fn();
-			if (result.prUrl) {
-				this.telemetry.recordPrUrl(result.prUrl);
-			}
-			this.sendMessage(ws, { type: "git_result", payload: { action, ...result } });
-			// Auto-refresh status on success (preserve workspacePath)
-			if (result.success) {
-				const status = await this.getGitOps().getStatus(workspacePath);
-				this.sendMessage(ws, { type: "git_status", payload: status });
-			}
-		} catch (err) {
-			this.sendMessage(ws, {
-				type: "git_result",
-				payload: {
-					action,
-					success: false,
-					code: "UNKNOWN_ERROR" as GitResultCode,
-					message: err instanceof Error ? err.message : "Unknown error",
-				},
-			});
-		}
+		await runGitActionWorkflow(
+			{
+				ensureRuntimeReady: () => this.ensureRuntimeReady(),
+				refreshGitContext: () => this.runtime.refreshGitContext(),
+				getGitOps: () => this.getGitOps(),
+				sendMessage: (socket, message) => this.sendMessage(socket, message as ServerMessage),
+				logError: (message, error) => this.logError(message, error),
+				recordPrUrl: (url) => this.telemetry.recordPrUrl(url),
+			},
+			{
+				ws,
+				action,
+				workspacePath,
+				run: fn,
+			},
+		);
 	}
 
 	// ============================================
@@ -1364,13 +1230,11 @@ export class SessionHub {
 		const becameIdle = (wasBusy && nowIdle) || reportedIdle;
 
 		if (wasBusy && nowIdle) {
-			this.touchActivity(); // marks agent-done boundary, starts grace period
-			this.lastKnownAgentIdleAt = Date.now();
+			markAgentIdle(this.getIdleControllerState());
 		}
 		if (reportedIdle) {
 			// Text-only completions can retain assistant message id for de-dup; treat explicit idle as done.
-			this.touchActivity();
-			this.lastKnownAgentIdleAt = Date.now();
+			markAgentIdle(this.getIdleControllerState());
 		}
 
 		// K4: Project needs_input when agent becomes idle
@@ -1421,57 +1285,11 @@ export class SessionHub {
 	}
 
 	private scheduleReconnect(): void {
-		const delays = this.env.reconnectDelaysMs;
-		const delayIndex = Math.min(this.reconnectAttempt, delays.length - 1);
-		const delay = delays[delayIndex];
-		this.reconnectAttempt++;
-
-		const generation = this.reconnectGeneration;
-
-		this.log("Scheduling reconnection", {
-			attempt: this.reconnectAttempt,
-			delayMs: delay,
-			generation,
-		});
-
-		this.reconnectTimerId = setTimeout(() => {
-			this.reconnectTimerId = null;
-
-			// Bail if generation changed (cancelReconnect was called)
-			if (this.reconnectGeneration !== generation) {
-				this.log("Reconnection aborted: generation mismatch", {
-					expected: generation,
-					current: this.reconnectGeneration,
-				});
-				return;
-			}
-
-			// Check again - clients may have disconnected during delay
-			if (this.clients.size === 0) {
-				this.log("No clients connected, aborting reconnection");
-				this.reconnectAttempt = 0;
-				return;
-			}
-
-			this.ensureRuntimeReady({ reason: "auto_reconnect" })
-				.then(() => {
-					this.log("Reconnection successful");
-					this.reconnectAttempt = 0;
-				})
-				.catch((err) => {
-					this.logError("Reconnection failed, retrying...", err);
-					this.scheduleReconnect();
-				});
-		}, delay);
+		scheduleReconnectState(this.getReconnectControllerState(), this.getReconnectControllerDeps());
 	}
 
 	private cancelReconnect(): void {
-		this.reconnectGeneration++;
-		if (this.reconnectTimerId) {
-			clearTimeout(this.reconnectTimerId);
-			this.reconnectTimerId = null;
-		}
-		this.reconnectAttempt = 0;
+		cancelReconnectState(this.getReconnectControllerState());
 	}
 
 	// ============================================
@@ -1548,10 +1366,7 @@ export class SessionHub {
 		}
 	}
 
-	private broadcastStatus(
-		status: "creating" | "resuming" | "running" | "paused" | "stopped" | "error" | "migrating",
-		message?: string,
-	): void {
+	private broadcastStatus(status: HubStatus, message?: string): void {
 		this.latestBroadcastStatus = status;
 		this.logger.info(
 			{
@@ -1574,14 +1389,12 @@ export class SessionHub {
 	 * Fire best-effort lifecycle side-effects when broadcast status changes.
 	 * K3: lastVisibleUpdateAt, K4: operator status, K5: session events.
 	 */
-	private handleStatusLifecycle(
-		status: "creating" | "resuming" | "running" | "paused" | "stopped" | "error" | "migrating",
-	): void {
+	private handleStatusLifecycle(status: HubStatus): void {
 		const orgId = this.runtime.getContext().session.organization_id;
 
 		if (status === "paused") {
 			// K5: Record session paused event
-			recordLifecycleEvent(this.sessionId, "session_paused", this.logger);
+			recordLifecycleEvent(this.sessionId, SESSION_LIFECYCLE_EVENT.PAUSED, this.logger);
 			// K3: Touch visible update on pause
 			touchLastVisibleUpdate(this.sessionId, this.logger);
 		} else if (status === "stopped") {
@@ -1596,7 +1409,7 @@ export class SessionHub {
 				logger: this.logger,
 			});
 			// K5: Record terminal event
-			recordLifecycleEvent(this.sessionId, "session_completed", this.logger);
+			recordLifecycleEvent(this.sessionId, SESSION_LIFECYCLE_EVENT.COMPLETED, this.logger);
 		} else if (status === "error") {
 			// K3: Touch visible update on error
 			touchLastVisibleUpdate(this.sessionId, this.logger);
@@ -1609,23 +1422,19 @@ export class SessionHub {
 				logger: this.logger,
 			});
 			// K5: Record failure event
-			recordLifecycleEvent(this.sessionId, "session_failed", this.logger);
+			recordLifecycleEvent(this.sessionId, SESSION_LIFECYCLE_EVENT.FAILED, this.logger);
 		} else if (status === "running") {
 			// K3: Touch visible update when session starts running
 			touchLastVisibleUpdate(this.sessionId, this.logger);
 		} else if (status === "resuming") {
 			// K5: Record session resumed event
-			recordLifecycleEvent(this.sessionId, "session_resumed", this.logger);
+			recordLifecycleEvent(this.sessionId, SESSION_LIFECYCLE_EVENT.RESUMED, this.logger);
 			// K3: Touch visible update on resume
 			touchLastVisibleUpdate(this.sessionId, this.logger);
 		}
 	}
 
-	private sendStatus(
-		ws: WebSocket,
-		status: "creating" | "resuming" | "running" | "paused" | "stopped" | "error" | "migrating",
-		message?: string,
-	): void {
+	private sendStatus(ws: WebSocket, status: HubStatus, message?: string): void {
 		this.logger.debug(
 			{
 				status,
@@ -1641,110 +1450,28 @@ export class SessionHub {
 	}
 
 	private async sendInit(ws: WebSocket): Promise<void> {
-		const contextSession = this.runtime.getContext().session;
-		const snapshotSession = await this.getFreshControlPlaneSession(contextSession);
-		const openCodeUrl =
-			this.runtime.getOpenCodeUrl() ?? contextSession.open_code_tunnel_url ?? null;
-		const openCodeSessionId =
-			this.runtime.getOpenCodeSessionId() ?? contextSession.coding_agent_session_id ?? null;
-		const previewUrl = this.runtime.getPreviewUrl() ?? contextSession.preview_tunnel_url ?? null;
-		const isCompletedAutomationSession = this.isCompletedAutomationSession();
-
-		let transformed: Message[] = [];
-		if (openCodeUrl && openCodeSessionId) {
-			try {
-				this.log("Fetching harness outputs for init...", {
-					openCodeSessionId,
-				});
-				transformed = await this.runtime.collectOutputs();
-				this.log("Fetched harness outputs", {
-					messageCount: transformed.length,
-				});
-			} catch (err) {
-				if (!isCompletedAutomationSession) {
-					throw err;
-				}
-				this.logError(
-					"Harness output fetch failed for completed automation; using fallback transcript",
-					err,
-				);
-			}
-		} else if (!isCompletedAutomationSession) {
-			throw new Error("Missing agent session info");
-		}
-
-		if (transformed.length === 0 && isCompletedAutomationSession) {
-			transformed = this.buildCompletedAutomationFallbackMessages();
-			this.log("Using completed automation fallback transcript", {
-				messageCount: transformed.length,
-				hasInitialPrompt: Boolean(contextSession.initial_prompt),
-				hasSummary: Boolean(contextSession.summary),
-				outcome: contextSession.outcome ?? null,
-			});
-		}
-
-		const transformedSummaries = transformed.slice(-20).map((message) => ({
-			id: message.id,
-			role: message.role,
-			isComplete: message.isComplete,
-			contentLength: message.content.length,
-			partCount: message.parts?.length ?? 0,
-			toolCallCount: message.toolCalls?.length ?? 0,
-			parts: (message.parts ?? []).slice(0, 5).map((part) => {
-				if (part.type === "text") {
-					return { type: "text", textLength: part.text.length };
-				}
-				if (part.type === "image") {
-					return { type: "image" };
-				}
-				return {
-					type: "tool",
-					toolCallId: part.toolCallId,
-					toolName: part.toolName,
-					status: part.status,
-				};
-			}),
-		}));
-		this.log("Transformed OpenCode messages for init", {
-			openCodeSessionId,
-			transformedCount: transformed.length,
-			transformedSummaries,
-		});
-		this.log("Sending init to client", {
-			messageCount: transformed.length,
-			isCompletedAutomationSession,
-		});
-
-		const initPayload: ServerMessage = {
-			type: "init",
-			payload: {
-				messages: transformed,
-				config: buildInitConfig(previewUrl),
-			},
-		};
-
-		this.sendMessage(ws, initPayload);
-		this.sendMessage(ws, {
-			type: "control_plane_snapshot",
-			payload: buildControlPlaneSnapshot(
-				snapshotSession,
-				this.reconnectGeneration,
+		const { initPayload, snapshotPayload } = await buildInitMessages({
+			sessionId: this.sessionId,
+			getRuntimeSession: () => this.runtime.getContext().session,
+			getFreshControlPlaneSession: (base) => this.getFreshControlPlaneSession(base),
+			getOpenCodeUrl: () => this.runtime.getOpenCodeUrl(),
+			getOpenCodeSessionId: () => this.runtime.getOpenCodeSessionId(),
+			getPreviewUrl: () => this.runtime.getPreviewUrl(),
+			isCompletedAutomationSession: () => this.isCompletedAutomationSession(),
+			collectOutputs: () => this.runtime.collectOutputs(),
+			buildCompletedAutomationFallbackMessages: () =>
+				this.buildCompletedAutomationFallbackMessages(),
+			log: (message, data) => this.log(message, data),
+			logError: (message, error) => this.logError(message, error),
+			reconnectGeneration: this.reconnectGeneration,
+			mapHubStatusToControlPlaneRuntime: () =>
 				this.mapHubStatusToControlPlaneRuntime(this.latestBroadcastStatus),
-			),
 		});
+		this.sendMessage(ws, initPayload);
+		this.sendMessage(ws, snapshotPayload);
 	}
 
-	private mapHubStatusToControlPlaneRuntime(
-		status:
-			| "creating"
-			| "resuming"
-			| "running"
-			| "paused"
-			| "stopped"
-			| "error"
-			| "migrating"
-			| null,
-	): SessionRuntimeStatus | null {
+	private mapHubStatusToControlPlaneRuntime(status: HubStatusOrNull): SessionRuntimeStatus | null {
 		switch (status) {
 			case "creating":
 			case "resuming":

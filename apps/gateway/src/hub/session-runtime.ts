@@ -13,14 +13,12 @@ import type {
 	Message,
 	SandboxProvider,
 	SandboxProviderType,
-	ServerMessage,
 } from "@proliferate/shared";
 import { getSandboxProvider } from "@proliferate/shared/providers";
 import { OpenCodeCodingHarnessAdapter } from "../harness/coding/opencode/adapter";
 import type {
 	CodingHarnessEventStreamHandle,
 	CodingHarnessPromptImage,
-	RuntimeDaemonEvent,
 } from "../harness/contracts/coding";
 import { ClaudeManagerHarnessAdapter } from "../harness/manager/adapter";
 import type { GatewayEnv } from "../lib/env";
@@ -28,7 +26,16 @@ import { scheduleSessionExpiry } from "../operations/expiry/queue";
 import { deriveSandboxMcpToken } from "../server/middleware/auth";
 import type { SandboxInfo } from "../types";
 import { waitForMigrationLockRelease } from "./session/migration/lock";
+import { connectCodingEventStream } from "./session/runtime/event-stream";
+import { waitForOpenCodeReady as waitForOpenCodeReadyHelper } from "./session/runtime/opencode-ready";
 import { type SessionContext, loadSessionContext } from "./session/runtime/session-context-store";
+import { withStepTiming } from "./session/runtime/timing";
+import type {
+	BroadcastServerMessageCallback,
+	DisconnectCallback,
+	RuntimeDaemonEventCallback,
+} from "./shared/callbacks";
+import type { HubStatusCallback } from "./shared/status";
 
 export class MigrationInProgressError extends Error {
 	constructor(message = "Migration in progress") {
@@ -46,13 +53,10 @@ export interface SessionRuntimeOptions {
 	env: GatewayEnv;
 	sessionId: string;
 	context: SessionContext;
-	onEvent: (event: RuntimeDaemonEvent) => void;
-	onDisconnect: (reason: string) => void;
-	onStatus: (
-		status: "creating" | "resuming" | "running" | "paused" | "stopped" | "error" | "migrating",
-		message?: string,
-	) => void;
-	onBroadcast?: (message: ServerMessage) => void;
+	onEvent: RuntimeDaemonEventCallback;
+	onDisconnect: DisconnectCallback;
+	onStatus: HubStatusCallback;
+	onBroadcast?: BroadcastServerMessageCallback;
 }
 
 export class SessionRuntime {
@@ -366,7 +370,7 @@ export class SessionRuntime {
 				configurationId: this.context.session.configuration_id,
 				repoCount: this.context.repos.length,
 				primaryRepo: this.context.primaryRepo.github_repo_name,
-				hasSandbox: Boolean(this.context.session.sandbox_id),
+				hasSandandbox: Boolean(this.context.session.sandbox_id),
 				hasSnapshot: Boolean(this.context.session.snapshot_id),
 			});
 			this.log(
@@ -597,11 +601,9 @@ export class SessionRuntime {
 
 			// Wait for OpenCode to become reachable before session operations.
 			// After sandbox recovery the tunnel may resolve before OpenCode is serving.
-			const readinessStartMs = Date.now();
-			await this.waitForOpenCodeReady();
-			this.logLatency("runtime.ensure_ready.opencode_ready", {
-				durationMs: Date.now() - readinessStartMs,
-			});
+			await withStepTiming("runtime.ensure_ready.opencode_ready", this.logLatency.bind(this), () =>
+				this.waitForOpenCodeReady(),
+			);
 
 			// Ensure OpenCode session exists
 			const ensureOpenCodeStartMs = Date.now();
@@ -612,27 +614,22 @@ export class SessionRuntime {
 			});
 
 			// Connect to daemon event stream via harness adapter
-			const sseStartMs = Date.now();
-			this.log("Connecting to coding harness event stream...", { url: this.openCodeUrl });
 			this.eventStreamHandle?.disconnect();
-			this.eventStreamHandle = await this.codingHarness.streamEvents({
-				baseUrl: this.openCodeUrl,
-				env: this.env,
-				logger: this.logger,
-				onDisconnect: (reason) => this.handleSseDisconnect(reason),
-				onEvent: (event) => {
-					this.logger.debug(
-						{ channel: event.channel, type: event.type },
-						"runtime.daemon_event.normalized",
-					);
-					this.onEvent(event);
-				},
-			});
+			this.eventStreamHandle = await withStepTiming(
+				"runtime.ensure_ready.sse.connect",
+				this.logLatency.bind(this),
+				() =>
+					connectCodingEventStream({
+						codingHarness: this.codingHarness,
+						openCodeUrl: this.openCodeUrl as string,
+						env: this.env,
+						logger: this.logger,
+						onDisconnect: (reason) => this.handleSseDisconnect(reason),
+						onEvent: (event) => this.onEvent(event),
+						onLog: (message, data) => this.log(message, data),
+					}),
+			);
 			this.eventStreamConnected = true;
-			this.log("Harness event stream connected");
-			this.logLatency("runtime.ensure_ready.sse.connect", {
-				durationMs: Date.now() - sseStartMs,
-			});
 
 			this.onStatus("running");
 			this.log("Runtime lifecycle complete - status: running");
@@ -678,54 +675,15 @@ export class SessionRuntime {
 	 * but OpenCode hasn't started serving yet (common after snapshot restore).
 	 */
 	private async waitForOpenCodeReady(): Promise<void> {
-		const maxAttempts = 8;
-		const intervalMs = 1500;
-		const perAttemptTimeoutMs = 2000;
-		const probeUrl = `${this.openCodeUrl}/session`;
-
-		this.log("Waiting for OpenCode readiness", { probeUrl });
-
-		for (let attempt = 1; attempt <= maxAttempts; attempt++) {
-			const attemptStartMs = Date.now();
-			try {
-				const response = await fetch(probeUrl, {
-					signal: AbortSignal.timeout(perAttemptTimeoutMs),
-				});
-				this.log("OpenCode ready", {
-					attempt,
-					status: response.status,
-					durationMs: Date.now() - attemptStartMs,
-				});
-				return;
-			} catch (err) {
-				const durationMs = Date.now() - attemptStartMs;
-				const message = err instanceof Error ? err.message : String(err);
-				const cause =
-					err instanceof Error && err.cause && typeof err.cause === "object"
-						? (err.cause as { code?: string; message?: string })
-						: undefined;
-
-				this.logger.warn(
-					{
-						attempt,
-						maxAttempts,
-						durationMs,
-						probeUrl,
-						error: message,
-						causeCode: cause?.code,
-						causeMessage: cause?.message,
-					},
-					"OpenCode readiness probe failed",
-				);
-
-				if (attempt >= maxAttempts) {
-					this.logError("OpenCode did not become ready", err);
-					throw new Error(`OpenCode not reachable after ${maxAttempts} attempts (${message})`);
-				}
-
-				await new Promise((resolve) => setTimeout(resolve, intervalMs));
-			}
+		if (!this.openCodeUrl) {
+			throw new Error("OpenCode URL missing");
 		}
+		await waitForOpenCodeReadyHelper({
+			openCodeUrl: this.openCodeUrl,
+			log: (message, data) => this.log(message, data),
+			logError: (message, error) => this.logError(message, error),
+			loggerWarn: (data, message) => this.logger.warn(data, message),
+		});
 	}
 
 	// ============================================

@@ -8,6 +8,10 @@
 import type { Logger } from "@proliferate/logger";
 import { sessions } from "@proliferate/services";
 import type { SessionOutcome } from "@proliferate/shared/contracts/sessions";
+import {
+	SESSION_LIFECYCLE_EVENT,
+	type SessionLifecycleEventType,
+} from "../shared/lifecycle-events";
 
 // ============================================
 // K1: Terminal outcome persistence
@@ -52,19 +56,19 @@ export async function persistTerminalOutcome(input: {
 		});
 
 		// Record lifecycle event
-		const eventType =
+		const eventType: SessionLifecycleEventType =
 			runtimeStatus === "completed"
-				? "session_completed"
+				? SESSION_LIFECYCLE_EVENT.COMPLETED
 				: runtimeStatus === "failed"
-					? "session_failed"
-					: "session_cancelled";
+					? SESSION_LIFECYCLE_EVENT.FAILED
+					: SESSION_LIFECYCLE_EVENT.CANCELLED;
 		await sessions.recordSessionEvent({
 			sessionId,
 			eventType,
 		});
 		await sessions.recordSessionEvent({
 			sessionId,
-			eventType: "session_outcome_persisted",
+			eventType: SESSION_LIFECYCLE_EVENT.OUTCOME_PERSISTED,
 		});
 
 		log.info({ sessionId, runtimeStatus }, "Persisted terminal outcome");
@@ -142,7 +146,7 @@ export async function projectOperatorStatus(input: {
 
 export async function recordLifecycleEvent(
 	sessionId: string,
-	eventType: string,
+	eventType: SessionLifecycleEventType,
 	logger: Logger,
 ): Promise<void> {
 	try {
