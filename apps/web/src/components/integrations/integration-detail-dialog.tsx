@@ -5,6 +5,7 @@ import { ConnectorForm } from "@/components/integrations/connector-form";
 import { ConnectorIcon } from "@/components/integrations/connector-icon";
 import type { CatalogEntry } from "@/components/integrations/integration-picker-dialog";
 import { CATEGORY_LABELS } from "@/components/integrations/integration-picker-dialog";
+import { PermissionsTab } from "@/components/integrations/permissions-tab";
 import {
 	ProviderIcon,
 	getProviderDisplayName,
@@ -16,6 +17,7 @@ import { CollapsibleSection } from "@/components/ui/collapsible-section";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
 import { Switch } from "@/components/ui/switch";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { getIntegrationScopeMeta } from "@/config/integration-scopes";
 import type { ConnectorConfig, ConnectorPreset } from "@proliferate/shared";
 import { CONNECTOR_PRESETS } from "@proliferate/shared";
 import { CheckCircle2, ExternalLink, Loader2 } from "lucide-react";
@@ -40,6 +42,8 @@ interface ConfigurationOption {
 
 interface IntegrationDetailDialogProps {
 	entry: CatalogEntry | null;
+	connectorId?: string;
+	initialTab?: "connect" | "about" | "settings";
 	open: boolean;
 	onOpenChange: (open: boolean) => void;
 	showBack: boolean;
@@ -66,6 +70,8 @@ interface IntegrationDetailDialogProps {
 
 export function IntegrationDetailDialog({
 	entry,
+	connectorId,
+	initialTab,
 	open,
 	onOpenChange,
 	showBack,
@@ -110,8 +116,20 @@ export function IntegrationDetailDialog({
 		jira: "Also powers issue management agent tools.",
 	};
 	const platformNote = PLATFORM_NOTES[entry.key];
+	const scopeMeta = getIntegrationScopeMeta({
+		key: entry.key,
+		type: entry.type,
+		category: entry.category,
+	});
 
-	const showSettingsTab = entry.key === "slack" && isConnected && !!slackConfig?.installationId;
+	const showSettingsTab = isConnected;
+	const defaultTabValue = initialTab
+		? initialTab === "settings" && !showSettingsTab
+			? "connect"
+			: initialTab
+		: showSettingsTab && (entry.type === "mcp-preset" || entry.type === "custom-mcp")
+			? "settings"
+			: "connect";
 
 	return (
 		<Dialog open={open} onOpenChange={onOpenChange}>
@@ -136,7 +154,11 @@ export function IntegrationDetailDialog({
 
 				{/* Tabs body */}
 				<div className="flex-1 overflow-hidden flex flex-col">
-					<Tabs defaultValue="connect" className="flex-1 flex flex-col overflow-hidden">
+					<Tabs
+						key={`${entry.key}:${connectorId ?? "none"}:${defaultTabValue}`}
+						defaultValue={defaultTabValue}
+						className="flex-1 flex flex-col overflow-hidden"
+					>
 						<TabsList className="inline-flex gap-3.5 border-b border-border w-full h-11 px-5 pt-3 pb-0 shrink-0 bg-transparent rounded-none justify-start">
 							<TabsTrigger
 								value="connect"
@@ -165,6 +187,7 @@ export function IntegrationDetailDialog({
 							<ConnectTabContent
 								entry={entry}
 								preset={preset}
+								scopeMeta={scopeMeta}
 								isConnected={isConnected}
 								isLoading={isLoading}
 								connectedMeta={connectedMeta}
@@ -228,13 +251,15 @@ export function IntegrationDetailDialog({
 							</div>
 						</TabsContent>
 
-						{/* Settings tab (Slack only) */}
+						{/* Settings tab */}
 						{showSettingsTab && (
 							<TabsContent value="settings" className="flex-1 overflow-y-auto p-5 mt-0">
-								<SlackSettingsContent
-									slackConfig={slackConfig!}
-									readyConfigurations={readyConfigurations ?? []}
-									onUpdate={onUpdateSlackConfig!}
+								<IntegrationSettingsContent
+									entry={entry}
+									connectorId={connectorId}
+									slackConfig={slackConfig}
+									readyConfigurations={readyConfigurations}
+									onUpdateSlackConfig={onUpdateSlackConfig}
 								/>
 							</TabsContent>
 						)}
@@ -254,6 +279,48 @@ export function IntegrationDetailDialog({
 	);
 }
 
+function IntegrationSettingsContent({
+	entry,
+	connectorId,
+	slackConfig,
+	readyConfigurations,
+	onUpdateSlackConfig,
+}: {
+	entry: CatalogEntry;
+	connectorId?: string;
+	slackConfig?: SlackConfigData | null;
+	readyConfigurations?: ConfigurationOption[];
+	onUpdateSlackConfig?: (input: {
+		installationId: string;
+		strategy: "fixed" | "agent_decide";
+		defaultConfigurationId?: string | null;
+		allowedConfigurationIds?: string[] | null;
+	}) => void;
+}) {
+	const isSlack = entry.key === "slack";
+
+	return (
+		<div className="space-y-4">
+			<PermissionsTab
+				isOAuth={entry.type === "oauth" || entry.type === "slack"}
+				provider={entry.provider ?? null}
+				connectorId={
+					entry.type === "mcp-preset" || entry.type === "custom-mcp" ? connectorId : undefined
+				}
+			/>
+			{isSlack && slackConfig?.installationId && onUpdateSlackConfig && (
+				<div className="rounded-lg border border-border/80 p-4">
+					<SlackSettingsContent
+						slackConfig={slackConfig}
+						readyConfigurations={readyConfigurations ?? []}
+						onUpdate={onUpdateSlackConfig}
+					/>
+				</div>
+			)}
+		</div>
+	);
+}
+
 // ====================================================================
 // Connect tab content (varies by integration type)
 // ====================================================================
@@ -261,6 +328,7 @@ export function IntegrationDetailDialog({
 function ConnectTabContent({
 	entry,
 	preset,
+	scopeMeta,
 	isConnected,
 	isLoading,
 	connectedMeta,
@@ -272,6 +340,7 @@ function ConnectTabContent({
 }: {
 	entry: CatalogEntry;
 	preset?: ConnectorPreset;
+	scopeMeta: { label: string; description: string };
 	isConnected: boolean;
 	isLoading: boolean;
 	connectedMeta: string | null;
@@ -333,6 +402,10 @@ function ConnectTabContent({
 	return (
 		<div className="space-y-6">
 			<p className="text-sm text-muted-foreground">{entry.description}</p>
+			<div className="rounded-md border border-border/70 bg-muted/30 px-3 py-2">
+				<p className="text-xs font-medium text-foreground">{scopeMeta.label}</p>
+				<p className="text-xs text-muted-foreground mt-0.5">{scopeMeta.description}</p>
+			</div>
 
 			<Button onClick={onConnect} disabled={isLoading} className="w-full">
 				{isLoading ? (

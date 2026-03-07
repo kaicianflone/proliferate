@@ -1,10 +1,13 @@
 "use client";
 
 import { ModelSelector } from "@/components/automations/model-selector";
+import { ReasoningSelector } from "@/components/dashboard/reasoning-selector";
+import { type Provider, ProviderIcon } from "@/components/integrations/provider-icon";
 import { Button } from "@/components/ui/button";
 import { BlocksIcon } from "@/components/ui/icons";
-import { Input } from "@/components/ui/input";
 import { RoundIconActionButton } from "@/components/ui/round-icon-action-button";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
+import { useSessionAvailableActions } from "@/hooks/actions/use-actions";
 import { useCreateFollowUp } from "@/hooks/sessions/use-follow-up";
 import { cn } from "@/lib/display/utils";
 import { useDashboardStore } from "@/stores/dashboard";
@@ -12,31 +15,21 @@ import {
 	ComposerPrimitive,
 	MessagePrimitive,
 	ThreadPrimitive,
+	useComposer,
 	useComposerRuntime,
-	useThreadRuntime,
 } from "@assistant-ui/react";
 import type { ActionApprovalRequestMessage } from "@proliferate/shared";
 import type { ModelId } from "@proliferate/shared";
 import type { Session } from "@proliferate/shared/contracts/sessions";
 import type { OverallWorkState } from "@proliferate/shared/sessions";
-import {
-	ArrowUp,
-	Camera,
-	ChevronDown,
-	ChevronRight,
-	Loader2,
-	Mic,
-	Paperclip,
-	Plus,
-	Square,
-	X,
-} from "lucide-react";
+import { ArrowUp, Camera, ChevronDown, ChevronRight, Loader2, Square } from "lucide-react";
+import Link from "next/link";
 import type { FC } from "react";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useState } from "react";
 import Markdown from "react-markdown";
-import SpeechRecognition, { useSpeechRecognition } from "react-speech-recognition";
 import { InboxTray } from "./inbox-tray";
 import { allToolUIs } from "./tool-ui/all-tool-uis";
+import { ProliferateToolCard } from "./tool-ui/proliferate-tool-card";
 
 // Shared markdown components for consistent rendering
 interface MarkdownContentProps {
@@ -93,11 +86,13 @@ function parseAssistantContentSegments(text: string): AssistantContentSegment[] 
 		markdownBuffer = [];
 	};
 
-	for (let index = 0; index < lines.length; index += 1) {
+	let index = 0;
+	while (index < lines.length) {
 		const line = lines[index];
 		const command = getProliferateCommandFromLine(line);
 		if (!command) {
 			markdownBuffer.push(line);
+			index += 1;
 			continue;
 		}
 
@@ -107,6 +102,7 @@ function parseAssistantContentSegments(text: string): AssistantContentSegment[] 
 			const urlMatch = lines[lookAhead].match(/https?:\/\/\S+/i);
 			if (urlMatch) {
 				nextUrl = urlMatch[0];
+				index = lookAhead;
 				break;
 			}
 			if (!lines[lookAhead].trim()) break;
@@ -118,6 +114,7 @@ function parseAssistantContentSegments(text: string): AssistantContentSegment[] 
 			actionLabel: getProliferateActionLabel(command),
 			url: nextUrl,
 		});
+		index += 1;
 	}
 
 	flushMarkdown();
@@ -258,93 +255,49 @@ const MarkdownContent: FC<MarkdownContentProps> = ({ text, variant = "assistant"
 	);
 };
 
-// Attachment preview with remove button
-interface AttachmentPreviewProps {
-	preview: string;
-	index: number;
-	onRemove: (index: number) => void;
-}
-
-const AttachmentPreview: FC<AttachmentPreviewProps> = ({ preview, index, onRemove }) => (
-	<div className="relative group">
-		<img
-			src={preview}
-			alt={`Attachment ${index + 1}`}
-			className="h-16 w-16 object-cover rounded-xl border border-border"
-		/>
-		<Button
-			type="button"
-			variant="destructive"
-			size="icon"
-			onClick={() => onRemove(index)}
-			className="absolute -top-1.5 -right-1.5 h-5 w-5 rounded-full text-xs opacity-0 group-hover:opacity-100 transition-opacity"
-		>
-			<X className="h-3 w-3" />
-		</Button>
-	</div>
-);
-
 // Context selectors (model selector) - left side of toolbar
 interface ComposerActionsLeftProps {
 	selectedModel: ModelId;
+	reasoningEffort: "quick" | "normal" | "deep";
 	onModelChange: (modelId: ModelId) => void;
+	onReasoningEffortChange: (effort: "quick" | "normal" | "deep") => void;
 }
 
-const ComposerActionsLeft: FC<ComposerActionsLeftProps> = ({ selectedModel, onModelChange }) => (
+const ComposerActionsLeft: FC<ComposerActionsLeftProps> = ({
+	selectedModel,
+	reasoningEffort,
+	onModelChange,
+	onReasoningEffortChange,
+}) => (
 	<div className="flex items-center gap-1">
 		<ModelSelector modelId={selectedModel} onChange={onModelChange} variant="ghost" />
+		<ReasoningSelector
+			modelId={selectedModel}
+			effort={reasoningEffort}
+			onChange={onReasoningEffortChange}
+		/>
 	</div>
 );
 
-// Action buttons (attach, mic, send/cancel) - right side of toolbar
+// Action buttons (send/cancel) - right side of toolbar
 interface ComposerActionsRightProps {
-	hasAttachments: boolean;
 	hasContent: boolean;
-	onSendWithAttachments: () => void;
-	onAttachClick: () => void;
-	onToggleRecording: () => void;
-	listening: boolean;
-	browserSupportsSpeechRecognition: boolean;
+	isTerminal: boolean;
+	onTerminalSend: () => void;
 }
 
 const ComposerActionsRight: FC<ComposerActionsRightProps> = ({
-	hasAttachments,
 	hasContent,
-	onSendWithAttachments,
-	onAttachClick,
-	onToggleRecording,
-	listening,
-	browserSupportsSpeechRecognition,
+	isTerminal,
+	onTerminalSend,
 }) => (
 	<div className="flex items-center gap-0.5">
-		<Button
-			variant="ghost"
-			size="icon"
-			className="h-7 w-7 text-muted-foreground hover:text-foreground rounded-full"
-			onClick={onAttachClick}
-		>
-			<Paperclip className="h-4 w-4" />
-		</Button>
-		<Button
-			variant="ghost"
-			size="icon"
-			className={cn(
-				"h-7 w-7 rounded-full",
-				listening
-					? "text-destructive hover:text-destructive/80"
-					: "text-muted-foreground hover:text-foreground",
-			)}
-			onClick={onToggleRecording}
-			disabled={!browserSupportsSpeechRecognition}
-		>
-			<Mic className={cn("h-4 w-4", listening && "animate-pulse")} />
-		</Button>
 		<ThreadPrimitive.If running={false}>
-			{hasAttachments ? (
+			{isTerminal ? (
 				<RoundIconActionButton
 					ariaLabel="Send message"
 					icon={<ArrowUp className="h-4 w-4" />}
-					onClick={onSendWithAttachments}
+					onClick={onTerminalSend}
 					disabled={!hasContent}
 				/>
 			) : (
@@ -400,6 +353,8 @@ export const Thread: FC<ThreadProps> = ({
 	runId,
 	sessionState,
 }) => {
+	const [showStatusDetails, setShowStatusDetails] = useState(false);
+
 	return (
 		<ThreadPrimitive.Root className="flex h-full flex-col">
 			{/* Scrollable message area */}
@@ -434,9 +389,27 @@ export const Thread: FC<ThreadProps> = ({
 
 			{statusMessage && (
 				<div className="shrink-0 px-3 pt-2">
-					<div className="mx-auto flex max-w-2xl items-center gap-2 rounded-md border border-border/60 bg-muted/30 px-3 py-2 text-xs text-muted-foreground">
-						<Loader2 className="h-3.5 w-3.5 shrink-0 animate-spin" />
-						<span className="truncate">{statusMessage}</span>
+					<div className="mx-auto max-w-2xl rounded-md border border-border/60 bg-muted/30 px-3 py-2 text-xs text-muted-foreground">
+						<Button
+							type="button"
+							variant="ghost"
+							size="sm"
+							className="h-auto w-full justify-start gap-2 px-0 py-0 text-xs text-muted-foreground hover:text-foreground"
+							onClick={() => setShowStatusDetails((value) => !value)}
+						>
+							<Loader2 className="h-3.5 w-3.5 shrink-0 animate-spin" />
+							<span className="truncate">{statusMessage}</span>
+							{showStatusDetails ? (
+								<ChevronDown className="ml-auto h-3.5 w-3.5 shrink-0" />
+							) : (
+								<ChevronRight className="ml-auto h-3.5 w-3.5 shrink-0" />
+							)}
+						</Button>
+						{showStatusDetails && (
+							<p className="mt-2 text-[11px] text-muted-foreground">
+								Long-running work is active. You can keep chatting while this runs.
+							</p>
+						)}
 					</div>
 				</div>
 			)}
@@ -457,7 +430,7 @@ export const Thread: FC<ThreadProps> = ({
 						</Button>
 					</div>
 				)}
-				<Composer sessionState={sessionState} />
+				<Composer sessionState={sessionState} sessionId={sessionId} token={token} />
 			</div>
 
 			{allToolUIs.map(({ id, Component }) => (
@@ -507,58 +480,88 @@ const COMPOSER_PLACEHOLDERS: Record<ComposerMode, string> = {
 
 interface ComposerProps {
 	sessionState?: SessionStateForComposer;
+	sessionId?: string;
+	token?: string | null;
 }
 
-const Composer: FC<ComposerProps> = ({ sessionState }) => {
-	const [attachments, setAttachments] = useState<{ file: File; preview: string }[]>([]);
-	const fileInputRef = useRef<HTMLInputElement>(null);
+function getProviderForIntegration(integration: string): Provider | null {
+	if (integration === "github" || integration === "jira" || integration === "linear") {
+		return integration;
+	}
+	if (integration === "posthog" || integration === "sentry" || integration === "slack") {
+		return integration;
+	}
+	return null;
+}
 
-	const threadRuntime = useThreadRuntime();
+const EnabledActionsStrip: FC<{ sessionId?: string; token?: string | null }> = ({
+	sessionId,
+	token,
+}) => {
+	const { data: integrations } = useSessionAvailableActions(sessionId ?? "", token ?? null);
+	const enabledIntegrations = integrations?.filter((entry) => entry.actions.length > 0) ?? [];
+	const enabledActionCount = enabledIntegrations.reduce(
+		(total, entry) => total + entry.actions.length,
+		0,
+	);
+
+	if (!sessionId || !token || enabledIntegrations.length === 0) {
+		return null;
+	}
+
+	const visibleIntegrations = enabledIntegrations.slice(0, 3);
+	const overflowCount = Math.max(enabledIntegrations.length - visibleIntegrations.length, 0);
+
+	return (
+		<TooltipProvider>
+			<div className="flex items-center justify-between gap-2 rounded-md border border-border/60 bg-muted/20 px-3 py-2">
+				<div className="flex items-center gap-2">
+					<div className="flex items-center -space-x-1">
+						{visibleIntegrations.map((entry) => {
+							const provider = getProviderForIntegration(entry.integration);
+							const tooltipText = `${entry.displayName}: ${entry.actions.length} actions enabled`;
+							return (
+								<Tooltip key={entry.integrationId}>
+									<TooltipTrigger asChild>
+										<div className="flex h-6 w-6 items-center justify-center rounded-full border border-border bg-background text-foreground">
+											{provider ? (
+												<ProviderIcon provider={provider} size="sm" />
+											) : (
+												<BlocksIcon className="h-3.5 w-3.5" />
+											)}
+										</div>
+									</TooltipTrigger>
+									<TooltipContent>{tooltipText}</TooltipContent>
+								</Tooltip>
+							);
+						})}
+						{overflowCount > 0 && (
+							<div className="ml-1 flex h-6 items-center rounded-full border border-border bg-background px-2 text-[11px] text-muted-foreground">
+								+{overflowCount}
+							</div>
+						)}
+					</div>
+					<span className="text-xs text-muted-foreground">
+						{enabledActionCount} actions enabled
+					</span>
+				</div>
+				<Link href="/dashboard/integrations" className="text-xs text-primary hover:underline">
+					Manage actions
+				</Link>
+			</div>
+		</TooltipProvider>
+	);
+};
+
+const Composer: FC<ComposerProps> = ({ sessionState, sessionId, token }) => {
 	const composerRuntime = useComposerRuntime();
-	const { selectedModel, setSelectedModel } = useDashboardStore();
+	const { selectedModel, setSelectedModel, reasoningEffort, setReasoningEffort } =
+		useDashboardStore();
 	const createFollowUp = useCreateFollowUp();
 
 	const composerMode = deriveComposerMode(sessionState);
 	const label = COMPOSER_LABELS[composerMode];
 	const placeholder = COMPOSER_PLACEHOLDERS[composerMode];
-
-	const { transcript, listening, resetTranscript, browserSupportsSpeechRecognition } =
-		useSpeechRecognition();
-
-	// Append transcript to composer when speech recognition completes
-	useEffect(() => {
-		if (!listening && transcript) {
-			const currentText = composerRuntime.getState().text;
-			composerRuntime.setText(currentText + (currentText ? " " : "") + transcript);
-			resetTranscript();
-		}
-	}, [listening, transcript, resetTranscript, composerRuntime]);
-
-	const handleAttachClick = () => fileInputRef.current?.click();
-
-	const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-		const file = e.target.files?.[0];
-		if (file?.type.startsWith("image/")) {
-			const reader = new FileReader();
-			reader.onloadend = () => {
-				setAttachments((prev) => [...prev, { file, preview: reader.result as string }]);
-			};
-			reader.readAsDataURL(file);
-		}
-		e.target.value = "";
-	};
-
-	const removeAttachment = (index: number) => {
-		setAttachments((prev) => prev.filter((_, i) => i !== index));
-	};
-
-	const toggleRecording = () => {
-		if (listening) {
-			SpeechRecognition.stopListening();
-		} else {
-			SpeechRecognition.startListening({ continuous: true });
-		}
-	};
 
 	const handleFollowUpSubmit = useCallback(
 		(text: string) => {
@@ -583,56 +586,25 @@ const Composer: FC<ComposerProps> = ({ sessionState }) => {
 
 	const isTerminal = composerMode === "completed" || composerMode === "failed";
 
-	const handleSendWithAttachments = () => {
+	const handleTerminalSend = () => {
 		const text = composerRuntime.getState().text.trim();
-		if (!text && attachments.length === 0) return;
+		if (!text) return;
 
 		if (isTerminal && text) {
 			handleFollowUpSubmit(text);
 			composerRuntime.setText("");
-			setAttachments([]);
 			return;
 		}
-
-		const content: Array<{ type: "text"; text: string } | { type: "image"; image: string }> = [];
-		if (text) content.push({ type: "text", text });
-		for (const attachment of attachments) {
-			content.push({ type: "image", image: attachment.preview });
-		}
-
-		threadRuntime.append({ role: "user", content });
-		composerRuntime.setText("");
-		setAttachments([]);
 	};
 
-	const hasContent = composerRuntime.getState().text.trim() || attachments.length > 0;
+	const hasContent = useComposer((s) => !!s.text.trim());
 
 	return (
 		<ComposerPrimitive.Root className="max-w-2xl mx-auto w-full">
-			<Input
-				ref={fileInputRef}
-				type="file"
-				accept="image/*"
-				onChange={handleFileChange}
-				className="hidden"
-			/>
-
 			{label && <p className="text-xs text-muted-foreground px-5 pb-1.5">{label}</p>}
+			<EnabledActionsStrip sessionId={sessionId} token={token} />
 
 			<div className="flex flex-col rounded-3xl border border-border bg-muted/40 dark:bg-card">
-				{attachments.length > 0 && (
-					<div className="flex gap-2 px-4 pt-3 pb-0 flex-wrap">
-						{attachments.map((attachment, index) => (
-							<AttachmentPreview
-								key={attachment.preview}
-								preview={attachment.preview}
-								index={index}
-								onRemove={removeAttachment}
-							/>
-						))}
-					</div>
-				)}
-
 				<ComposerPrimitive.Input
 					placeholder={placeholder}
 					className="flex-1 resize-none bg-transparent px-5 py-3.5 text-sm outline-none placeholder:text-muted-foreground"
@@ -642,10 +614,7 @@ const Composer: FC<ComposerProps> = ({ sessionState }) => {
 						if (e.key === "Enter" && !e.shiftKey) {
 							if (isTerminal) {
 								e.preventDefault();
-								handleSendWithAttachments();
-							} else if (attachments.length > 0) {
-								e.preventDefault();
-								handleSendWithAttachments();
+								handleTerminalSend();
 							}
 						}
 					}}
@@ -653,15 +622,12 @@ const Composer: FC<ComposerProps> = ({ sessionState }) => {
 
 				<div className="flex items-center justify-between px-3 pb-2">
 					<div className="flex items-center gap-0.5">
-						<Button
-							variant="ghost"
-							size="icon"
-							className="h-7 w-7 text-muted-foreground hover:text-foreground rounded-full"
-							onClick={handleAttachClick}
-						>
-							<Plus className="h-4 w-4" />
-						</Button>
-						<ComposerActionsLeft selectedModel={selectedModel} onModelChange={setSelectedModel} />
+						<ComposerActionsLeft
+							selectedModel={selectedModel}
+							reasoningEffort={reasoningEffort}
+							onModelChange={setSelectedModel}
+							onReasoningEffortChange={setReasoningEffort}
+						/>
 					</div>
 					<div className="flex items-center gap-0.5">
 						{sessionState?.workerId && (
@@ -675,13 +641,9 @@ const Composer: FC<ComposerProps> = ({ sessionState }) => {
 							</Button>
 						)}
 						<ComposerActionsRight
-							hasAttachments={attachments.length > 0}
-							hasContent={!!hasContent}
-							onSendWithAttachments={handleSendWithAttachments}
-							onAttachClick={handleAttachClick}
-							onToggleRecording={toggleRecording}
-							listening={listening}
-							browserSupportsSpeechRecognition={browserSupportsSpeechRecognition}
+							hasContent={hasContent}
+							isTerminal={isTerminal}
+							onTerminalSend={handleTerminalSend}
 						/>
 					</div>
 				</div>
@@ -726,10 +688,12 @@ const AssistantMessage: FC = () => (
 	</MessagePrimitive.Root>
 );
 
-const ToolFallback: FC<{ toolName: string; args: unknown; result?: unknown }> = ({
-	toolName,
-	result,
-}) => {
+const ToolFallback: FC<{
+	toolName: string;
+	args: unknown;
+	result?: unknown;
+	status?: { type: string };
+}> = ({ toolName, result, status }) => {
 	const [expanded, setExpanded] = useState(false);
 	const hasResult = result !== undefined;
 	const resultString = hasResult
@@ -739,30 +703,28 @@ const ToolFallback: FC<{ toolName: string; args: unknown; result?: unknown }> = 
 		: null;
 
 	return (
-		<div className="my-0.5">
+		<ProliferateToolCard
+			label={toolName}
+			status={
+				status?.type === "running" ? "running" : status?.type === "error" ? "error" : "success"
+			}
+			errorMessage={typeof result === "string" && result.startsWith("Error") ? result : undefined}
+		>
 			<Button
 				type="button"
 				variant="ghost"
 				onClick={() => hasResult && setExpanded(!expanded)}
-				className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors h-auto p-0"
+				className="h-auto gap-1 p-0 text-xs text-muted-foreground hover:bg-transparent hover:text-foreground"
 				disabled={!hasResult}
 			>
-				{hasResult ? (
-					expanded ? (
-						<ChevronDown className="h-3 w-3" />
-					) : (
-						<ChevronRight className="h-3 w-3" />
-					)
-				) : (
-					<Loader2 className="h-3 w-3 animate-spin" />
-				)}
-				<span>{toolName}</span>
+				{expanded ? <ChevronDown className="h-3 w-3" /> : <ChevronRight className="h-3 w-3" />}
+				<span>{expanded ? "Hide details" : "Show details"}</span>
 			</Button>
 			{expanded && resultString && (
 				<pre className="mt-1 max-h-40 overflow-auto rounded-lg border border-border/40 bg-muted/30 p-2 font-mono text-xs text-muted-foreground">
 					{resultString.slice(0, 3000)}
 				</pre>
 			)}
-		</div>
+		</ProliferateToolCard>
 	);
 };

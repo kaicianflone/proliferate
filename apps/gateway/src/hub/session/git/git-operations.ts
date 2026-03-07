@@ -19,6 +19,8 @@ import { SANDBOX_PATHS, buildGitCredentialsMap, shellEscape } from "@proliferate
 import type { GitIdentity } from "../runtime/git-identity";
 
 const WORKSPACE_DIR = `${SANDBOX_PATHS.home}/workspace`;
+const OPEN_PR_SUCCESS_CACHE_TTL_MS = 60_000;
+const OPEN_PR_ERROR_CACHE_TTL_MS = 10_000;
 
 /** Non-interactive env for all git/gh commands. */
 const GIT_BASE_ENV: Record<string, string> = {
@@ -41,6 +43,13 @@ type GitActionResult = {
 };
 
 export class GitOperations {
+	private openPrCache: {
+		key: string;
+		value: { url: string; number: number } | null;
+		fetchedAtMs: number;
+		ttlMs: number;
+	} | null = null;
+
 	constructor(
 		private provider: SandboxProvider,
 		private sandboxId: string,
@@ -197,6 +206,10 @@ export class GitOperations {
 		const statusParsed = parseStatusV2(statusResult.stdout);
 		const commits = parseLogOutput(logResult.stdout);
 		const busyState = parseBusyState(probeResult.stdout);
+		const openPr =
+			!statusParsed.detached && statusParsed.branch
+				? await this.detectOpenPullRequest(cwd, statusParsed.branch, workspacePath)
+				: null;
 
 		return {
 			...statusParsed,
@@ -208,7 +221,87 @@ export class GitOperations {
 			isBusy: busyState.isBusy,
 			rebaseInProgress: busyState.rebaseInProgress,
 			mergeInProgress: busyState.mergeInProgress,
+			...(openPr?.url ? { openPrUrl: openPr.url } : {}),
+			...(openPr?.number ? { openPrNumber: openPr.number } : {}),
 		};
+	}
+
+	private async detectOpenPullRequest(
+		cwd: string,
+		branch: string,
+		workspacePath?: string,
+	): Promise<{ url: string; number: number } | null> {
+		const cacheKey = `${workspacePath || "."}:${branch}`;
+		const now = Date.now();
+		if (
+			this.openPrCache &&
+			this.openPrCache.key === cacheKey &&
+			now - this.openPrCache.fetchedAtMs < this.openPrCache.ttlMs
+		) {
+			return this.openPrCache.value;
+		}
+
+		const commandEnv = { ...this.getReadOnlyEnv(), ...this.getAuthEnv(workspacePath) };
+		const result = await this.exec(
+			[
+				"gh",
+				"pr",
+				"list",
+				"--head",
+				branch,
+				"--state",
+				"open",
+				"--limit",
+				"1",
+				"--json",
+				"url,number",
+			],
+			{
+				cwd,
+				timeoutMs: 5_000,
+				env: commandEnv,
+			},
+		);
+
+		if (result.exitCode !== 0 || !result.stdout.trim()) {
+			this.openPrCache = {
+				key: cacheKey,
+				value: null,
+				fetchedAtMs: now,
+				ttlMs: OPEN_PR_ERROR_CACHE_TTL_MS,
+			};
+			return null;
+		}
+
+		try {
+			const parsed = JSON.parse(result.stdout) as Array<{ url?: unknown; number?: unknown }>;
+			const first = parsed[0];
+			if (!first || typeof first.url !== "string" || typeof first.number !== "number") {
+				this.openPrCache = {
+					key: cacheKey,
+					value: null,
+					fetchedAtMs: now,
+					ttlMs: OPEN_PR_ERROR_CACHE_TTL_MS,
+				};
+				return null;
+			}
+			const value = { url: first.url, number: first.number };
+			this.openPrCache = {
+				key: cacheKey,
+				value,
+				fetchedAtMs: now,
+				ttlMs: OPEN_PR_SUCCESS_CACHE_TTL_MS,
+			};
+			return value;
+		} catch {
+			this.openPrCache = {
+				key: cacheKey,
+				value: null,
+				fetchedAtMs: now,
+				ttlMs: OPEN_PR_ERROR_CACHE_TTL_MS,
+			};
+			return null;
+		}
 	}
 
 	// ============================================

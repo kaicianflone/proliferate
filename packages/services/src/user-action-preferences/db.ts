@@ -1,7 +1,7 @@
 /**
  * User action preferences — DB operations.
  *
- * Stores per-user, per-org opt-out preferences for action sources.
+ * Stores per-user, per-org opt-out preferences for action sources and actions.
  * Absence of a row means "enabled" (default). Only explicit changes are stored.
  */
 
@@ -12,6 +12,10 @@ import { and, eq, getDb, isNull, userActionPreferences } from "../db/client";
 // ============================================
 
 export type UserActionPreferenceRow = typeof userActionPreferences.$inferSelect;
+export interface DisabledActionPreferences {
+	disabledSourceIds: Set<string>;
+	disabledActionsBySource: Map<string, Set<string>>;
+}
 
 // ============================================
 // Queries
@@ -52,6 +56,52 @@ export async function getDisabledSourceIds(userId: string, orgId: string): Promi
 			),
 		);
 	return new Set(rows.map((r) => r.sourceId));
+}
+
+/**
+ * Get both disabled source-level and action-level preferences.
+ * Used by gateway and actions service to enforce per-action visibility and invoke guards.
+ */
+export async function getDisabledPreferences(
+	userId: string,
+	orgId: string,
+): Promise<DisabledActionPreferences> {
+	const db = getDb();
+	const rows = await db
+		.select({
+			sourceId: userActionPreferences.sourceId,
+			actionId: userActionPreferences.actionId,
+		})
+		.from(userActionPreferences)
+		.where(
+			and(
+				eq(userActionPreferences.userId, userId),
+				eq(userActionPreferences.organizationId, orgId),
+				eq(userActionPreferences.enabled, false),
+			),
+		);
+
+	const disabledSourceIds = new Set<string>();
+	const disabledActionsBySource = new Map<string, Set<string>>();
+
+	for (const row of rows) {
+		if (!row.actionId) {
+			disabledSourceIds.add(row.sourceId);
+			continue;
+		}
+
+		const existing = disabledActionsBySource.get(row.sourceId);
+		if (existing) {
+			existing.add(row.actionId);
+			continue;
+		}
+		disabledActionsBySource.set(row.sourceId, new Set([row.actionId]));
+	}
+
+	return {
+		disabledSourceIds,
+		disabledActionsBySource,
+	};
 }
 
 /**

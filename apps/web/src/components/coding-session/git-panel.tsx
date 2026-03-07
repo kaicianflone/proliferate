@@ -75,6 +75,10 @@ interface FileRow {
 	priority: number;
 }
 
+function buildDiffCacheKey(workspacePath: string, scope: string, path: string): string {
+	return `${workspacePath}:${scope}:${path}`;
+}
+
 const IGNORED_GIT_PATH_PREFIXES = [".opencode/", ".proliferate/"] as const;
 const IGNORED_GIT_PATH_EXACT = ["opencode.json", ".opencode.json"] as const;
 
@@ -152,6 +156,7 @@ export function GitPanel({
 	const pollPending = useRef(false);
 	const pollInterval = useRef<ReturnType<typeof setInterval> | null>(null);
 	const diffTimeouts = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map());
+	const diffRequestWorkspaceRef = useRef<Record<string, string>>({});
 	const [pollError, setPollError] = useState<string | null>(null);
 	const [changeScope, setChangeScope] = useState<ChangeScope>("working");
 	const [showPrComposer, setShowPrComposer] = useState(false);
@@ -168,7 +173,23 @@ export function GitPanel({
 	);
 
 	const resolvedWorkspacePath = workspaceOptions?.length ? selectedWorkspacePath : undefined;
+	const workspaceKey = resolvedWorkspacePath ?? ".";
 	const showWorkspaceSelector = (workspaceOptions?.length ?? 0) > 1;
+	const resetDiffState = useCallback(() => {
+		setLatestPrUrl(null);
+		setLatestPrNumber(null);
+		for (const timeout of diffTimeouts.current.values()) {
+			clearTimeout(timeout);
+		}
+		diffTimeouts.current.clear();
+		diffRequestWorkspaceRef.current = {};
+		diffCacheRef.current = {};
+		loadingDiffsRef.current = {};
+		setExpandedFiles({});
+		setDiffCache({});
+		setDiffErrors({});
+		setLoadingDiffs({});
+	}, []);
 
 	useEffect(() => {
 		if (!workspaceOptions || workspaceOptions.length === 0) return;
@@ -176,7 +197,8 @@ export function GitPanel({
 			return;
 		}
 		setSelectedWorkspacePath(workspaceOptions[0].workspacePath);
-	}, [workspaceOptions, selectedWorkspacePath]);
+		resetDiffState();
+	}, [workspaceOptions, selectedWorkspacePath, resetDiffState]);
 
 	const requestStatus = useCallback(() => {
 		if (pollPending.current || !sendGetGitStatus) return;
@@ -219,19 +241,6 @@ export function GitPanel({
 	useEffect(() => {
 		if (gitResult) pollPending.current = false;
 	}, [gitResult]);
-
-	useEffect(() => {
-		setLatestPrUrl(null);
-		setLatestPrNumber(null);
-		for (const timeout of diffTimeouts.current.values()) {
-			clearTimeout(timeout);
-		}
-		diffTimeouts.current.clear();
-		setExpandedFiles({});
-		setDiffCache({});
-		setDiffErrors({});
-		setLoadingDiffs({});
-	}, [resolvedWorkspacePath, changeScope]);
 
 	useEffect(() => {
 		diffCacheRef.current = diffCache;
@@ -291,7 +300,10 @@ export function GitPanel({
 
 	useEffect(() => {
 		if (!gitDiff) return;
-		const key = `${gitDiff.scope}:${gitDiff.path}`;
+		const requestKey = `${gitDiff.scope}:${gitDiff.path}`;
+		const responseWorkspaceKey = diffRequestWorkspaceRef.current[requestKey] ?? workspaceKey;
+		delete diffRequestWorkspaceRef.current[requestKey];
+		const key = buildDiffCacheKey(responseWorkspaceKey, gitDiff.scope, gitDiff.path);
 		const pendingTimeout = diffTimeouts.current.get(key);
 		if (pendingTimeout) {
 			clearTimeout(pendingTimeout);
@@ -309,7 +321,7 @@ export function GitPanel({
 		} else if (!gitDiff.success || gitDiff.message) {
 			setDiffErrors((prev) => ({ ...prev, [key]: gitDiff.message || "Failed to load diff" }));
 		}
-	}, [gitDiff]);
+	}, [gitDiff, workspaceKey]);
 
 	useEffect(() => {
 		return () => {
@@ -330,15 +342,20 @@ export function GitPanel({
 
 	const diffScope: "unstaged" | "staged" | "full" = changeScope === "working" ? "unstaged" : "full";
 
-	const toggleFileDiff = useCallback(
-		(path: string) => {
-			const key = `${diffScope}:${path}`;
-			const nextValue = !expandedFiles[path];
-			setExpandedFiles((prev) => ({ ...prev, [path]: nextValue }));
-			if (!nextValue || !sendGetGitDiff) return;
-			if (diffCacheRef.current[key] || loadingDiffsRef.current[key]) return;
+	const requestFileDiff = useCallback(
+		(path: string, force = false) => {
+			if (!sendGetGitDiff) return;
+			const requestKey = `${diffScope}:${path}`;
+			const key = buildDiffCacheKey(workspaceKey, diffScope, path);
+			if (!force && (diffCacheRef.current[key] || loadingDiffsRef.current[key])) return;
 
 			setLoadingDiffs((loadingPrev) => ({ ...loadingPrev, [key]: true }));
+			setDiffErrors((errorPrev) => {
+				if (!errorPrev[key]) return errorPrev;
+				const next = { ...errorPrev };
+				delete next[key];
+				return next;
+			});
 			const existingTimeout = diffTimeouts.current.get(key);
 			if (existingTimeout) {
 				clearTimeout(existingTimeout);
@@ -349,17 +366,26 @@ export function GitPanel({
 					if (diffCacheRef.current[key]) return errorPrev;
 					return {
 						...errorPrev,
-						[key]:
-							errorPrev[key] ||
-							"Diff request timed out. Try collapsing and expanding this file again.",
+						[key]: errorPrev[key] || "Diff request timed out. Click Retry to try again.",
 					};
 				});
 				diffTimeouts.current.delete(key);
 			}, 12_000);
 			diffTimeouts.current.set(key, timeout);
+			diffRequestWorkspaceRef.current[requestKey] = workspaceKey;
 			sendGetGitDiff(path, diffScope, resolvedWorkspacePath);
 		},
-		[diffScope, expandedFiles, resolvedWorkspacePath, sendGetGitDiff],
+		[diffScope, workspaceKey, resolvedWorkspacePath, sendGetGitDiff],
+	);
+
+	const toggleFileDiff = useCallback(
+		(path: string) => {
+			const nextValue = !expandedFiles[path];
+			setExpandedFiles((prev) => ({ ...prev, [path]: nextValue }));
+			if (!nextValue) return;
+			requestFileDiff(path);
+		},
+		[expandedFiles, requestFileDiff],
 	);
 
 	return (
@@ -375,7 +401,13 @@ export function GitPanel({
 							<p className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
 								Workspace
 							</p>
-							<Select value={selectedWorkspacePath} onValueChange={setSelectedWorkspacePath}>
+							<Select
+								value={selectedWorkspacePath}
+								onValueChange={(nextWorkspacePath) => {
+									setSelectedWorkspacePath(nextWorkspacePath);
+									resetDiffState();
+								}}
+							>
 								<SelectTrigger className="h-8 text-xs">
 									<SelectValue />
 								</SelectTrigger>
@@ -413,14 +445,19 @@ export function GitPanel({
 
 					<ChangesFirstSection
 						fileRows={fileRows}
+						workspaceKey={workspaceKey}
 						changeScope={changeScope}
-						onChangeScope={setChangeScope}
+						onChangeScope={(nextScope) => {
+							setChangeScope(nextScope);
+							resetDiffState();
+						}}
 						diffScope={diffScope}
 						expandedFiles={expandedFiles}
 						diffCache={diffCache}
 						diffErrors={diffErrors}
 						loadingDiffs={loadingDiffs}
 						onToggleFileDiff={toggleFileDiff}
+						onRetryFileDiff={(path) => requestFileDiff(path, true)}
 					/>
 
 					<CommitSection gitState={gitState} canMutate={canMutate} sendGitCommit={handleCommit} />
@@ -507,7 +544,7 @@ function GitTopBar({
 					<div className="flex min-w-0 items-center gap-2">
 						<GitBranch className="h-4 w-4 shrink-0 text-success" />
 						<span className="shrink-0 text-sm font-medium">
-							{effectivePrNumber ? `#${effectivePrNumber}` : `#${fileCount}`}
+							{effectivePrNumber ? `#${effectivePrNumber}` : `${fileCount} files`}
 						</span>
 						<div className="ml-1 flex items-center gap-1.5">
 							<p className="text-sm font-medium text-success">+{positiveCount}</p>
@@ -537,6 +574,7 @@ function GitTopBar({
 						size="icon"
 						className="h-7 w-7"
 						onClick={onRefresh}
+						aria-label="Refresh git status"
 						title="Refresh"
 					>
 						<RefreshCcw className="h-3.5 w-3.5" />
@@ -590,6 +628,7 @@ function GitTopBar({
 						variant="ghost"
 						size="sm"
 						className="h-7 px-2"
+						aria-label="Cancel branch creation"
 						onClick={() => setShowBranchInput(false)}
 					>
 						<X className="h-3 w-3" />
@@ -720,7 +759,9 @@ function compactContextRows(rows: ParsedDiffRow[], keepEdgeLines = 2): RenderRow
 		} else {
 			output.push(...run.slice(0, keepEdgeLines));
 			output.push({ kind: "omitted", count: run.length - keepEdgeLines * 2 });
-			output.push(...run.slice(-keepEdgeLines));
+			if (keepEdgeLines > 0) {
+				output.push(...run.slice(-keepEdgeLines));
+			}
 		}
 		index = end;
 	}
@@ -740,6 +781,20 @@ function DiffContent({ patch }: { patch: string }) {
 		);
 	}
 	const rows = compactContextRows(parsed, 0);
+	let omittedCounter = 0;
+	const keyedRows = rows.map((row) => {
+		if (row.kind === "omitted") {
+			omittedCounter += 1;
+			return { key: `omitted-${omittedCounter}-${row.count}`, row };
+		}
+		if (row.kind === "hunk") {
+			return { key: `hunk-${row.content}`, row };
+		}
+		return {
+			key: `${row.kind}-${row.oldLine ?? "n"}-${row.newLine ?? "n"}-${row.content}`,
+			row,
+		};
+	});
 
 	const renderLineNumber = (value: number | null) => (
 		<span className="w-10 shrink-0 text-right tabular-nums text-muted-foreground">
@@ -750,11 +805,11 @@ function DiffContent({ patch }: { patch: string }) {
 	return (
 		<div className="rounded-md border border-border/70 bg-muted/20 overflow-x-auto">
 			<div className="min-w-full p-2 font-mono text-[12px] leading-6">
-				{rows.map((row, index) => {
+				{keyedRows.map(({ key, row }) => {
 					if (row.kind === "omitted") {
 						return (
 							<div
-								key={`omitted-${index}`}
+								key={key}
 								className="mx-1 my-1 rounded-md border border-border/60 bg-background px-3 py-1 text-[11px] text-muted-foreground"
 							>
 								{row.count} unmodified lines
@@ -776,7 +831,7 @@ function DiffContent({ patch }: { patch: string }) {
 
 					return (
 						<div
-							key={`line-${index}`}
+							key={key}
 							className={`grid grid-cols-[2.6rem_minmax(0,1fr)] items-center gap-2 px-2 ${rowClassName}`}
 						>
 							{renderLineNumber(displayLine)}
@@ -791,6 +846,7 @@ function DiffContent({ patch }: { patch: string }) {
 
 function ChangesFirstSection({
 	fileRows,
+	workspaceKey,
 	changeScope,
 	onChangeScope,
 	diffScope,
@@ -799,8 +855,10 @@ function ChangesFirstSection({
 	diffErrors,
 	loadingDiffs,
 	onToggleFileDiff,
+	onRetryFileDiff,
 }: {
 	fileRows: FileRow[];
+	workspaceKey: string;
 	changeScope: ChangeScope;
 	onChangeScope: (scope: ChangeScope) => void;
 	diffScope: "unstaged" | "staged" | "full";
@@ -809,6 +867,7 @@ function ChangesFirstSection({
 	diffErrors: Record<string, string>;
 	loadingDiffs: Record<string, boolean>;
 	onToggleFileDiff: (path: string) => void;
+	onRetryFileDiff: (path: string) => void;
 }) {
 	const scopeCount = fileRows.length;
 
@@ -844,7 +903,7 @@ function ChangesFirstSection({
 			) : (
 				<div className="space-y-2">
 					{fileRows.map((row) => {
-						const key = `${diffScope}:${row.path}`;
+						const key = buildDiffCacheKey(workspaceKey, diffScope, row.path);
 						const expanded = !!expandedFiles[row.path];
 						const patch = diffCache[key];
 						const error = diffErrors[key];
@@ -890,7 +949,17 @@ function ChangesFirstSection({
 										{loading ? (
 											<p className="text-xs text-muted-foreground">Loading diff...</p>
 										) : error ? (
-											<p className="text-xs text-muted-foreground">{error}</p>
+											<div className="flex items-center justify-between gap-2">
+												<p className="text-xs text-muted-foreground">{error}</p>
+												<Button
+													variant="outline"
+													size="sm"
+													className="h-6 px-2 text-[11px]"
+													onClick={() => onRetryFileDiff(row.path)}
+												>
+													Retry
+												</Button>
+											</div>
 										) : patch ? (
 											<DiffContent patch={patch} />
 										) : (
@@ -1033,6 +1102,11 @@ function PrSection({
 	const [title, setTitle] = useState("");
 	const [body, setBody] = useState("");
 	const [baseBranch, setBaseBranch] = useState("");
+	const resetForm = () => {
+		setTitle("");
+		setBody("");
+		setBaseBranch("");
+	};
 
 	if (gitState.detached) {
 		return (
@@ -1090,6 +1164,7 @@ function PrSection({
 									body.trim() || undefined,
 									baseBranch.trim() || undefined,
 								);
+								resetForm();
 								onShowFormChange(false);
 							}}
 						>
@@ -1100,7 +1175,11 @@ function PrSection({
 							variant="ghost"
 							size="sm"
 							className="h-7 px-2"
-							onClick={() => onShowFormChange(false)}
+							aria-label="Close pull request form"
+							onClick={() => {
+								resetForm();
+								onShowFormChange(false);
+							}}
 						>
 							<X className="h-3 w-3" />
 						</Button>
@@ -1120,7 +1199,7 @@ function CommitsSection({ gitState }: { gitState: GitState }) {
 			<div className="space-y-1">
 				{gitState.commits.slice(0, 8).map((commit) => (
 					<div key={commit.sha} className="flex items-start gap-1.5 text-xs">
-						<span className="font-mono text-muted-foreground shrink-0">
+						<span className="tabular-nums text-muted-foreground shrink-0">
 							{commit.sha.slice(0, 7)}
 						</span>
 						<span className="truncate">{commit.message}</span>

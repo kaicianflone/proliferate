@@ -38,7 +38,7 @@ import type { RuntimeFacade } from "./session/runtime/contracts/runtime-facade";
 import { CodingRuntimeDriver } from "./session/runtime/drivers/coding-runtime-driver";
 import { selectRuntimeDriver } from "./session/runtime/drivers/driver-selector";
 import { ManagerRuntimeDriver } from "./session/runtime/drivers/manager-runtime-driver";
-import type { SessionContext } from "./session/runtime/session-context-store";
+import { type SessionContext, loadSessionContext } from "./session/runtime/session-context-store";
 import { clearRuntimePointers } from "./session/runtime/state/state-reconciler";
 import { persistRuntimeReady } from "./session/runtime/write-authority/runtime-writers";
 import type {
@@ -143,16 +143,17 @@ export class SessionRuntime implements RuntimeFacade {
 	 * Refresh git-related context fields so git operations can use
 	 * newly-resolved integration tokens and latest user identity.
 	 */
-	async refreshGitContext(): Promise<void> {
-		const refreshed = await loadSessionRuntimeContext(this.env, this.sessionId);
+	async refreshGitContext(preferredGitUserId?: string | null): Promise<void> {
+		const refreshed = await loadSessionContext(this.env, this.sessionId, {
+			preferredGitUserId: preferredGitUserId ?? null,
+		});
 		this.runtimeContext = {
+			...this.runtimeContext,
 			config: {
 				...this.runtimeContext.config,
-				primaryRepo: refreshed.config.primaryRepo,
-				repos: refreshed.config.repos,
-				gitIdentity: refreshed.config.gitIdentity,
+				repos: refreshed.repos,
+				gitIdentity: refreshed.gitIdentity,
 			},
-			live: this.runtimeContext.live,
 		};
 	}
 
