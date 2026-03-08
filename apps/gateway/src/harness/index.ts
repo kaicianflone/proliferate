@@ -15,10 +15,6 @@ export type {
 	RuntimeDaemonEvent,
 } from "./contracts/coding";
 
-export {
-	ClaudeManagerHarnessAdapter,
-	type ManagerHarnessAdapter,
-	type ManagerHarnessState,
-} from "./manager/adapter";
+export { normalizeDaemonEvent } from "./daemon/event-normalizer";
 
 export { SandboxAgentV2CodingHarnessAdapter } from "./coding/sandbox-agent-v2/adapter";

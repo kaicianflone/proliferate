@@ -96,10 +96,11 @@ export class SseClient<TEvent = OpenCodeEvent> {
 		this.connectStartTime = Date.now();
 		this.logLatency("sse.connect.start", { url: sseUrl });
 
-		const headers = new Headers(this.options.headers);
-		headers.set("Accept", "text/event-stream");
 		const response = await fetch(sseUrl, {
-			headers,
+			headers: {
+				Accept: "text/event-stream",
+				...(this.options.headers ?? {}),
+			},
 			signal: controller.signal,
 		});
 

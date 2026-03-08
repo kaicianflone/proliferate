@@ -31,12 +31,7 @@ function broadcastDaemonEnvelope(
 	if (!onBroadcast) {
 		return;
 	}
-
-	const hasTypedHandler =
-		envelope.stream === "port_opened" ||
-		envelope.stream === "port_closed" ||
-		envelope.stream === "fs_change";
-	if (envelope.stream !== "agent_event" && !hasTypedHandler) {
+	if (envelope.stream !== "agent_event") {
 		onBroadcast({ type: "daemon_stream", payload: envelope } as ServerMessage);
 	}
 
@@ -72,7 +67,6 @@ function broadcastDaemonEnvelope(
 export class CodingRuntimeDriver implements RuntimeDriver {
 	private readonly codingHarness = new SandboxAgentV2CodingHarnessAdapter();
 	private runtimeBaseUrl: string | null = null;
-	private runtimeAuthToken: string | null = null;
 	private openCodeSessionId: string | null = null;
 	private runtimeBindingId: string | null = null;
 	private eventStreamHandle: CodingHarnessEventStreamHandle | null = null;
@@ -91,21 +85,23 @@ export class CodingRuntimeDriver implements RuntimeDriver {
 		this.live = input.live;
 		this.serviceCommands = input.config.serviceCommands;
 		this.runtimeBaseUrl = input.live.previewUrl;
-		this.runtimeAuthToken = deriveSandboxMcpToken(input.env.serviceToken, input.sessionId);
-		if (!this.runtimeBaseUrl || !this.runtimeAuthToken) {
-			throw new Error("Missing sandbox runtime daemon endpoint");
+		if (!this.runtimeBaseUrl) {
+			throw new Error("Missing sandbox runtime endpoint");
 		}
 
-		const ensureSessionStartMs = Date.now();
-		await this.ensureAgentSession(input.sessionId, input.live, input.logger);
-		input.logLatency("runtime.ensure_ready.agent_session.ensure", {
-			durationMs: Date.now() - ensureSessionStartMs,
-			hasSessionId: Boolean(input.live.openCodeSessionId),
+		// Ensure or create an ACP session via sandbox-agent
+		const ensureAcpStartMs = Date.now();
+		await this.ensureAcpSession(input.sessionId, input.live);
+		input.logLatency("runtime.ensure_ready.acp_session.ensure", {
+			durationMs: Date.now() - ensureAcpStartMs,
+			hasOpenCodeSessionId: Boolean(input.live.openCodeSessionId),
 		});
 
-		this.eventStreamHandle?.disconnect();
-		this.runtimeBindingId = randomUUID();
+		this.runtimeBindingId = this.openCodeSessionId ?? randomUUID();
 		input.setRuntimeBindingId(this.runtimeBindingId);
+
+		this.eventStreamHandle?.disconnect();
+		const sandboxAuthToken = deriveSandboxMcpToken(input.env.serviceToken, input.sessionId);
 		this.eventStreamHandle = await withStepTiming(
 			"runtime.ensure_ready.sse.connect",
 			input.logLatency,
@@ -113,7 +109,7 @@ export class CodingRuntimeDriver implements RuntimeDriver {
 				connectCodingEventStream({
 					codingHarness: this.codingHarness,
 					runtimeBaseUrl: this.runtimeBaseUrl as string,
-					authToken: this.runtimeAuthToken as string,
+					authToken: sandboxAuthToken,
 					afterSeq: input.live.lastRuntimeSourceSeq ?? undefined,
 					bindingId: this.runtimeBindingId as string,
 					env: input.env,
@@ -140,13 +136,16 @@ export class CodingRuntimeDriver implements RuntimeDriver {
 		return { driverKind: "coding-opencode", runtimeBindingId: this.runtimeBindingId };
 	}
 
-	async sendPrompt(content: string, images?: CodingHarnessPromptImage[]): Promise<void> {
-		if (!this.runtimeBaseUrl || !this.runtimeAuthToken || !this.openCodeSessionId) {
+	async sendPrompt(
+		_userId: string,
+		content: string,
+		images?: CodingHarnessPromptImage[],
+	): Promise<void> {
+		if (!this.runtimeBaseUrl || !this.openCodeSessionId) {
 			throw new Error("Agent session unavailable");
 		}
 		await this.codingHarness.sendPrompt({
 			baseUrl: this.runtimeBaseUrl,
-			authToken: this.runtimeAuthToken,
 			sessionId: this.openCodeSessionId,
 			content,
 			images,
@@ -154,26 +153,21 @@ export class CodingRuntimeDriver implements RuntimeDriver {
 	}
 
 	async interrupt(): Promise<void> {
-		if (!this.runtimeBaseUrl || !this.runtimeAuthToken || !this.openCodeSessionId) {
+		if (!this.runtimeBaseUrl || !this.openCodeSessionId) {
 			return;
 		}
 		await this.codingHarness.interrupt({
 			baseUrl: this.runtimeBaseUrl,
-			authToken: this.runtimeAuthToken,
 			sessionId: this.openCodeSessionId,
 		});
-		// ACP interrupt deletes the server — clear the session ID so the next
-		// activate() cycle creates a fresh one via resume().
-		this.openCodeSessionId = null;
 	}
 
 	async collectOutputs(): Promise<Message[]> {
-		if (!this.runtimeBaseUrl || !this.runtimeAuthToken || !this.openCodeSessionId) {
+		if (!this.runtimeBaseUrl || !this.openCodeSessionId) {
 			throw new Error("Missing agent session info");
 		}
 		const result = await this.codingHarness.collectOutputs({
 			baseUrl: this.runtimeBaseUrl,
-			authToken: this.runtimeAuthToken,
 			sessionId: this.openCodeSessionId,
 		});
 		return result.messages;
@@ -216,33 +210,18 @@ export class CodingRuntimeDriver implements RuntimeDriver {
 		});
 	}
 
-	private async ensureAgentSession(
+	private async ensureAcpSession(
 		sessionId: string,
 		live: RuntimeDriverExecutionInput["live"],
-		logger: import("@proliferate/logger").Logger,
 	): Promise<void> {
-		if (!this.runtimeBaseUrl || !this.runtimeAuthToken) {
+		if (!this.runtimeBaseUrl) {
 			throw new Error("Agent URL missing");
 		}
 		const storedId = live.openCodeSessionId ?? live.session.coding_agent_session_id;
-		let resumed: { sessionId: string; mode: string };
-		try {
-			resumed = await this.codingHarness.resume({
-				baseUrl: this.runtimeBaseUrl,
-				authToken: this.runtimeAuthToken,
-				sessionId: storedId,
-			});
-		} catch (error) {
-			logger.warn(
-				{ err: error, mode: "get", hasSessionId: Boolean(storedId) },
-				"Runtime session lookup failed, falling back to stored ID",
-			);
-			if (storedId) {
-				resumed = { sessionId: storedId, mode: "reused" };
-			} else {
-				throw error;
-			}
-		}
+		const resumed = await this.codingHarness.resume({
+			baseUrl: this.runtimeBaseUrl,
+			sessionId: storedId,
+		});
 		this.openCodeSessionId = resumed.sessionId;
 		await persistCodingSessionId({
 			sessionId,
@@ -254,7 +233,6 @@ export class CodingRuntimeDriver implements RuntimeDriver {
 	resetState(): void {
 		this.disconnectStream();
 		this.runtimeBaseUrl = null;
-		this.runtimeAuthToken = null;
 		this.openCodeSessionId = null;
 		this.runtimeBindingId = null;
 		this.provider = null;

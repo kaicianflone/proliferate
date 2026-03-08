@@ -108,14 +108,20 @@ export function createInProcessManagerControlFacade(
 				}
 
 				if (session.createdBy) {
-					const disabled = await userActionPreferences.getDisabledSourceIds(
+					const disabled = await userActionPreferences.getDisabledPreferences(
 						session.createdBy,
 						session.organizationId,
 					);
-					if (disabled.has(input.integration)) {
+					if (disabled.disabledSourceIds.has(input.integration)) {
 						return {
 							status: 403,
 							body: { error: "This integration is disabled by user preferences" },
+						};
+					}
+					if (disabled.disabledActionsBySource.get(input.integration)?.has(input.action)) {
+						return {
+							status: 403,
+							body: { error: "This action is disabled by user preferences" },
 						};
 					}
 				}
@@ -199,18 +205,14 @@ export function createInProcessManagerControlFacade(
 						},
 					});
 
-					projectOperatorStatus({
+					void projectOperatorStatus({
 						sessionId: input.sessionId,
 						organizationId: session.organizationId,
 						runtimeStatus: "running",
 						hasPendingApproval: true,
 						logger,
-					}).catch((err) =>
-						logger.warn({ err, sessionId: input.sessionId }, "Failed to project operator status"),
-					);
-					touchLastVisibleUpdate(input.sessionId, logger).catch((err) =>
-						logger.warn({ err, sessionId: input.sessionId }, "Failed to touch last visible update"),
-					);
+					});
+					void touchLastVisibleUpdate(input.sessionId, logger);
 
 					return {
 						status: 202,

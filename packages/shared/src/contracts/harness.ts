@@ -222,16 +222,28 @@ export interface ManagerHarnessStartInput {
 	workerId: string | null;
 	gatewayUrl: string;
 	serviceToken: string;
+	gatewayAuthToken?: string;
 	anthropicApiKey: string;
 	llmProxyUrl?: string;
 	managerMemoryDir?: string;
 	managerMemoryIndexPath?: string;
+	hiddenRuntimeDir?: string;
 }
 
 export interface ManagerHarnessState {
 	managerSessionId: string;
-	status: "running" | "interrupted" | "stopped" | "idle";
+	status: "starting" | "running" | "interrupted" | "stopped" | "idle" | "failed";
 	currentRunId?: string;
+	managerMemoryDir?: string;
+	managerMemoryIndexPath?: string;
+	hiddenRuntimeDir?: string;
+	statePath?: string;
+	transcriptPath?: string;
+	lastError?: {
+		code: string;
+		message: string;
+		at: string;
+	} | null;
 }
 
 export interface ManagerHarnessAdapter {

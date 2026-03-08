@@ -1,9 +1,11 @@
 /**
  * sandbox-daemon — platform transport boundary inside sandboxes.
  *
- * Provides PTY, FS, port watching, and preview proxy transport.
- * Agent sessions (coding + manager) are handled by Sandbox Agent
- * on port 2468, not by this daemon.
+ * Provides PTY, FS, ports, preview proxy, and platform SSE.
+ * Agent lifecycle is managed by sandbox-agent (ACP protocol).
+ *
+ * Usage:
+ *   sandbox-daemon
  *
  * The daemon should be launched via tini/dumb-init as PID 1 wrapper
  * for proper signal handling and child process reaping.
@@ -27,13 +29,10 @@ import { createDaemonServer } from "./server.js";
 const config = loadConfig(process.argv);
 const logger = createLogger({ service: "sandbox-daemon" });
 
-logger.info(
-	{ port: config.port, workspace: config.workspaceRoot },
-	"Starting sandbox daemon",
-);
+logger.info({ port: config.port, workspace: config.workspaceRoot }, "Starting sandbox daemon");
 
 // ---------------------------------------------------------------------------
-// Auth setup
+// Auth setup (B7)
 // ---------------------------------------------------------------------------
 
 if (config.sessionToken) {
@@ -62,7 +61,7 @@ const portWatcher = new PortWatcher({ eventBus, logger });
 const previewProxy = new PreviewProxy({ portWatcher, logger });
 
 // ---------------------------------------------------------------------------
-// Router
+// Router (B1)
 // ---------------------------------------------------------------------------
 
 const router = new Router({
@@ -102,7 +101,7 @@ startSubsystems().catch((err) => {
 });
 
 // ---------------------------------------------------------------------------
-// Signal handling
+// Signal handling (B1)
 // ---------------------------------------------------------------------------
 
 function shutdown(signal: string): void {

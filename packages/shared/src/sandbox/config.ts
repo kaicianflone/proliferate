@@ -55,7 +55,7 @@ export const DEFAULT_CADDYFILE = `{
         }
     }
 
-    # Sandbox Agent (Rivet): ACP protocol for coding + manager agent sessions
+    # Sandbox Agent ACP — universal agent substrate (coding + manager sessions)
     handle /v1/* {
         reverse_proxy localhost:2468
     }
@@ -193,8 +193,10 @@ export const SANDBOX_PATHS = {
  * Standard ports used by sandboxes
  */
 export const SANDBOX_PORTS = {
-	/** Sandbox Agent (Rivet) — ACP protocol for agent sessions */
-	sandboxAgent: 2468,
+	/** OpenCode API server */
+	opencode: 4096,
+	/** Sandbox Agent ACP (Rivet) */
+	sandboxAgentAcp: 2468,
 	/** Caddy preview proxy */
 	preview: 20000,
 	/** SSH (for terminal sessions) */

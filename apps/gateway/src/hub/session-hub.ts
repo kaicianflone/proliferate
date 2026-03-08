@@ -88,6 +88,15 @@ interface HubDependencies {
 
 /** Renewal interval: ~1/3 of owner lease TTL. */
 const LEASE_RENEW_INTERVAL_MS = Math.floor(OWNER_LEASE_TTL_MS / 3);
+const MAX_SOURCE_EVENT_KEYS = 10_000;
+
+function isOpenCodeEvent(value: unknown): value is OpenCodeEvent {
+	if (!value || typeof value !== "object") {
+		return false;
+	}
+	const candidate = value as { type?: unknown };
+	return typeof candidate.type === "string";
+}
 
 export class SessionHub {
 	private readonly env: GatewayEnv;
@@ -138,11 +147,17 @@ export class SessionHub {
 	private readonly telemetry: SessionTelemetry;
 	private telemetryFlushTimer: ReturnType<typeof setInterval> | null = null;
 
-	// Canonical runtime event sequencing + stale stream fencing + dedupe
-	private readonly eventSequencer = new EventSequencer();
+	// Canonical runtime event sequencing + stale stream fencing
+	private runtimeEventSeq = 0;
+	private activeRuntimeBindingId: string | null = null;
+	private readonly seenRuntimeSourceEventKeys = new Set<string>();
+	private readonly runtimeSourceEventKeyOrder: string[] = [];
 
 	// Phase 1 invariant: only one active prompt/run at a time
 	private activePromptRunId: string | null = null;
+
+	// In-memory message history (accumulates from broadcast events for collectOutputs fallback)
+	private readonly messageHistory: Message[] = [];
 
 	constructor(deps: HubDependencies) {
 		this.env = deps.env;
@@ -239,12 +254,25 @@ export class SessionHub {
 		return 0;
 	}
 
+	private resetRuntimeBindingState(bindingId: string | null): void {
+		this.activeRuntimeBindingId = bindingId;
+		this.seenRuntimeSourceEventKeys.clear();
+		this.runtimeSourceEventKeyOrder.length = 0;
+	}
+
+	private rememberSourceEventKey(sourceEventKey: string): void {
+		this.seenRuntimeSourceEventKeys.add(sourceEventKey);
+		this.runtimeSourceEventKeyOrder.push(sourceEventKey);
+		if (this.runtimeSourceEventKeyOrder.length > MAX_SOURCE_EVENT_KEYS) {
+			const oldest = this.runtimeSourceEventKeyOrder.shift();
+			if (oldest) {
+				this.seenRuntimeSourceEventKeys.delete(oldest);
+			}
+		}
+	}
+
 	private isRunActive(): boolean {
-		return Boolean(
-			this.activePromptRunId ||
-				this.eventProcessor.getCurrentAssistantMessageId() ||
-				this.eventProcessor.hasRunningTools(),
-		);
+		return Boolean(this.activePromptRunId || this.eventProcessor.hasRunningTools());
 	}
 
 	private isCompletedAutomationSession(): boolean {
@@ -383,12 +411,20 @@ export class SessionHub {
 		this.log("Eager start requested");
 		if (this.runtime.isReady() && this.runtime.getContext().session.kind === "manager") {
 			this.log("Manager runtime already ready — triggering new wake cycle");
+			this.eventProcessor.resetForNewPrompt(true);
 			await this.runtime.triggerManagerWakeCycle();
 			this.log("Manager wake cycle triggered");
 			return;
 		}
 		await this.ensureRuntimeReady();
-		await this.maybeSendInitialPrompt();
+		if (this.runtime.getContext().session.kind === "manager") {
+			this.log("Manager runtime first boot — triggering initial wake cycle");
+			this.eventProcessor.resetForNewPrompt(true);
+			await this.runtime.triggerManagerWakeCycle();
+			this.log("Manager initial wake cycle triggered");
+		} else {
+			await this.maybeSendInitialPrompt();
+		}
 		this.log("Eager start complete");
 	}
 
@@ -818,6 +854,10 @@ export class SessionHub {
 			this.stopLeaseRenewal();
 			throw err;
 		}
+		const runtimeBindingId = this.runtime.getRuntimeBindingId();
+		if (runtimeBindingId !== this.activeRuntimeBindingId) {
+			this.resetRuntimeBindingState(runtimeBindingId);
+		}
 		clearAgentIdle(this.getIdleControllerState()); // fresh sandbox, agent state unknown
 		this.telemetry.startRunning(); // idempotent: only sets if not already running
 		this.startMigrationMonitor();
@@ -1049,13 +1089,11 @@ export class SessionHub {
 		await runPromptWorkflow(
 			{
 				sessionId: this.sessionId,
+				isManagerSession: () => this.runtime.getContext().session.kind === "manager",
 				isCompletedAutomationSession: () => this.isCompletedAutomationSession(),
-				tryStartRun: (runId) => {
-					if (this.isRunActive()) {
-						return false;
-					}
+				isRunActive: () => this.isRunActive(),
+				markRunStarted: (runId) => {
 					this.activePromptRunId = runId;
-					return true;
 				},
 				clearRunState: () => {
 					this.activePromptRunId = null;
@@ -1086,9 +1124,9 @@ export class SessionHub {
 					this.lastPromptSenderUserId = promptUserId;
 				},
 				getSessionClientType: () => this.runtime.getContext().session.client_type ?? null,
-				resetEventProcessorForNewPrompt: () => this.eventProcessor.resetForNewPrompt(),
+				resetEventProcessorForNewPrompt: () => this.eventProcessor.resetForNewPrompt(true),
 				sendPromptToRuntime: (promptContent, images) =>
-					this.runtime.sendPrompt(promptContent, images),
+					this.runtime.sendPrompt(userId, promptContent, images),
 			},
 			content,
 			userId,
@@ -1245,26 +1283,45 @@ export class SessionHub {
 
 	private handleRuntimeDaemonEvent(event: RuntimeDaemonEvent): void {
 		const runtimeBindingId = this.runtime.getRuntimeBindingId();
-		const result = this.eventSequencer.process(event, runtimeBindingId);
-		if (!result.accepted) {
+		if (runtimeBindingId !== this.activeRuntimeBindingId) {
+			this.resetRuntimeBindingState(runtimeBindingId);
+		}
+
+		const resolvedBindingId = event.bindingId ?? runtimeBindingId;
+		if (runtimeBindingId && resolvedBindingId && resolvedBindingId !== runtimeBindingId) {
 			this.logger.debug(
 				{
-					reason: result.reason,
+					incomingBindingId: resolvedBindingId,
+					activeBindingId: runtimeBindingId,
 					eventType: event.type,
-					bindingId: event.bindingId,
-					sourceEventKey: event.sourceEventKey,
 				},
-				`Dropping runtime event: ${result.reason}`,
+				"Dropping stale runtime event from superseded binding",
 			);
 			return;
 		}
+		if (resolvedBindingId) {
+			event.bindingId = resolvedBindingId;
+		}
+		const sourceEventKey =
+			event.sourceEventKey ??
+			`${resolvedBindingId ?? "legacy"}:${event.sourceSeq ?? "na"}:${event.type}:${event.occurredAt}`;
+		if (this.seenRuntimeSourceEventKeys.has(sourceEventKey)) {
+			this.logger.debug(
+				{ sourceEventKey, eventType: event.type },
+				"Dropping duplicate runtime event",
+			);
+			return;
+		}
+		event.sourceEventKey = sourceEventKey;
+		this.rememberSourceEventKey(sourceEventKey);
+		event.eventSeq = ++this.runtimeEventSeq;
 
 		this.broadcast({
 			type: "daemon_stream",
 			payload: {
 				v: "1",
 				stream: "agent_event",
-				seq: event.sourceSeq ?? result.eventSeq ?? 0,
+				seq: event.sourceSeq ?? event.eventSeq,
 				event: "data",
 				payload: event,
 				ts: Number.isFinite(Date.parse(event.occurredAt))
@@ -1273,13 +1330,17 @@ export class SessionHub {
 			},
 		});
 
-		// Bridge RuntimeDaemonEvent into OpenCodeEvent shape for the EventProcessor.
-		// The event mapper produces payloads matching OpenCodeEvent property shapes,
-		// so we just wrap { type, properties } around the existing data.
-		const rawEvent = {
-			type: event.type,
-			properties: (event.payload ?? {}) as Record<string, unknown>,
-		} as OpenCodeEvent;
+		const runtimeServerMessage = this.extractRuntimeServerMessage(event.payload);
+		if (runtimeServerMessage) {
+			this.handleRuntimeServerMessage(event, runtimeServerMessage);
+			return;
+		}
+
+		const rawEvent = event.payload;
+		if (!isOpenCodeEvent(rawEvent)) {
+			this.logger.warn({ eventType: event.type }, "Ignoring unsupported daemon event payload");
+			return;
+		}
 
 		this.touchActivity();
 		const wasBusy = this.eventProcessor.getCurrentAssistantMessageId() !== null;
@@ -1316,6 +1377,55 @@ export class SessionHub {
 				logger: this.logger,
 			});
 		}
+	}
+
+	private handleRuntimeServerMessage(event: RuntimeDaemonEvent, message: ServerMessage): void {
+		this.touchActivity();
+		if (message.type === "message") {
+			clearAgentIdle(this.getIdleControllerState());
+			const payloadId =
+				message.payload &&
+				typeof message.payload === "object" &&
+				"id" in message.payload &&
+				typeof message.payload.id === "string"
+					? message.payload.id
+					: null;
+			this.activePromptRunId = event.runId ?? payloadId ?? "manager-runtime";
+		}
+		if (
+			message.type === "message_complete" ||
+			message.type === "message_cancelled" ||
+			message.type === "error"
+		) {
+			markAgentIdle(this.getIdleControllerState());
+			this.activePromptRunId = null;
+			const orgId = this.runtime.getContext().session.organization_id;
+			void projectOperatorStatus({
+				sessionId: this.sessionId,
+				organizationId: orgId,
+				runtimeStatus: "running",
+				hasPendingApproval: false,
+				isAgentIdle: true,
+				logger: this.logger,
+			});
+		}
+		this.broadcast(message);
+	}
+
+	private extractRuntimeServerMessage(payload: unknown): ServerMessage | null {
+		if (!payload || typeof payload !== "object" || Array.isArray(payload)) {
+			return null;
+		}
+		const candidate = payload as { message?: unknown };
+		if (
+			!candidate.message ||
+			typeof candidate.message !== "object" ||
+			Array.isArray(candidate.message)
+		) {
+			return null;
+		}
+		const serverMessage = candidate.message as { type?: unknown };
+		return typeof serverMessage.type === "string" ? (candidate.message as ServerMessage) : null;
 	}
 
 	private handleSseDisconnect(reason: string): void {
@@ -1373,6 +1483,7 @@ export class SessionHub {
 	// ============================================
 
 	private broadcast(message: ServerMessage): void {
+		this.accumulateMessage(message);
 		this.persistDurableFact(message);
 
 		if (
@@ -1424,6 +1535,145 @@ export class SessionHub {
 			} catch {
 				// Ignore send failures
 			}
+		}
+	}
+
+	/**
+	 * Accumulate message state from broadcast events so that collectOutputs
+	 * can return message history on client reconnect (page reload).
+	 */
+	private accumulateMessage(message: ServerMessage): void {
+		switch (message.type) {
+			case "message": {
+				const msg = message.payload as Message;
+				const existing = this.messageHistory.find((m) => m.id === msg.id);
+				if (existing) {
+					existing.role = msg.role;
+					existing.content = msg.content ?? existing.content;
+					existing.isComplete = msg.isComplete ?? existing.isComplete;
+					existing.senderId = msg.senderId ?? existing.senderId;
+					existing.source = msg.source ?? existing.source;
+					if (msg.parts) {
+						existing.parts = [...msg.parts];
+					}
+				} else {
+					this.messageHistory.push({
+						id: msg.id,
+						role: msg.role,
+						content: msg.content ?? "",
+						isComplete: msg.isComplete ?? false,
+						createdAt: msg.createdAt ?? Date.now(),
+						senderId: msg.senderId,
+						source: msg.source,
+						parts: msg.parts ? [...msg.parts] : undefined,
+					});
+				}
+				break;
+			}
+			case "token": {
+				const { messageId, token } = message.payload as {
+					messageId: string;
+					token: string;
+				};
+				const msg = this.messageHistory.find((m) => m.id === messageId);
+				if (msg) {
+					msg.content += token;
+				}
+				break;
+			}
+			case "text_part_complete": {
+				const { messageId, text } = message.payload as {
+					messageId: string;
+					partId: string;
+					text: string;
+				};
+				const msg = this.messageHistory.find((m) => m.id === messageId);
+				if (msg) {
+					// Overwrite accumulated token content with the finalized text
+					// since text_part_complete carries the full text of the part.
+					if (!msg.parts) {
+						msg.parts = [];
+					}
+					// Only add if not already present
+					const exists = msg.parts.some((p) => p.type === "text" && p.text === text);
+					if (!exists) {
+						msg.parts.push({ type: "text", text });
+					}
+				}
+				break;
+			}
+			case "tool_start": {
+				const payload = message.payload as {
+					messageId?: string;
+					toolCallId: string;
+					tool: string;
+					args: unknown;
+				};
+				let msg: Message | undefined;
+				if (payload.messageId) {
+					msg = this.messageHistory.find((m) => m.id === payload.messageId);
+				} else {
+					// Find last assistant message
+					for (let i = this.messageHistory.length - 1; i >= 0; i--) {
+						if (this.messageHistory[i].role === "assistant") {
+							msg = this.messageHistory[i];
+							this.logger.debug(
+								{ toolCallId: payload.toolCallId, inferredMessageId: msg.id },
+								"tool_start missing messageId, inferred from last assistant message",
+							);
+							break;
+						}
+					}
+				}
+				if (msg) {
+					if (!msg.toolCalls) {
+						msg.toolCalls = [];
+					}
+					msg.toolCalls.push({
+						id: payload.toolCallId,
+						tool: payload.tool,
+						args: payload.args,
+						status: "running",
+						startedAt: Date.now(),
+					});
+				}
+				break;
+			}
+			case "tool_end": {
+				const payload = message.payload as {
+					toolCallId: string;
+					tool: string;
+					result: unknown;
+				};
+				for (const msg of this.messageHistory) {
+					const tc = msg.toolCalls?.find((t) => t.id === payload.toolCallId);
+					if (tc) {
+						tc.result = payload.result;
+						tc.status = "completed";
+						tc.completedAt = Date.now();
+						break;
+					}
+				}
+				break;
+			}
+			case "message_complete": {
+				const { messageId } = message.payload as { messageId: string };
+				const msg = this.messageHistory.find((m) => m.id === messageId);
+				if (msg) {
+					msg.isComplete = true;
+				}
+				break;
+			}
+			case "message_cancelled": {
+				const { messageId } = message.payload as { messageId: string };
+				const msg = this.messageHistory.find((m) => m.id === messageId);
+				if (msg) {
+					msg.isComplete = true;
+				}
+				break;
+			}
+			default:
+				break;
 		}
 	}
 
@@ -1574,7 +1824,16 @@ export class SessionHub {
 			getOpenCodeSessionId: () => this.runtime.getOpenCodeSessionId(),
 			getPreviewUrl: () => this.runtime.getPreviewUrl(),
 			isCompletedAutomationSession: () => this.isCompletedAutomationSession(),
-			collectOutputs: () => this.runtime.collectOutputs(),
+			isManagerSession: () => this.runtime.getContext().session.kind === "manager",
+			collectOutputs: async () => {
+				const driverMessages = await this.runtime.collectOutputs();
+				if (driverMessages.length > 0) {
+					return driverMessages;
+				}
+				// Fallback: return in-memory accumulated messages (e.g. when the
+				// adapter cannot fetch history from the agent, like sandbox-agent-v2).
+				return this.messageHistory.map((m) => ({ ...m, isComplete: true }));
+			},
 			buildCompletedAutomationFallbackMessages: () =>
 				this.buildCompletedAutomationFallbackMessages(),
 			getDurableRuntimeFacts: async () => {
