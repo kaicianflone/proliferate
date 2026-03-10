@@ -6,7 +6,7 @@
 
 import { logger } from "@/lib/infra/logger";
 import { ORPCError } from "@orpc/server";
-import { configurations } from "@proliferate/services";
+import { configurations, repos } from "@proliferate/services";
 import {
 	ConfigurationSchema,
 	CreateConfigurationInputSchema,
@@ -205,24 +205,6 @@ export const configurationsRouter = {
 		}),
 
 	/**
-	 * Get env file spec for a configuration.
-	 */
-	getEnvFiles: orgProcedure
-		.input(z.object({ configurationId: z.string().uuid() }))
-		.output(z.object({ envFiles: z.unknown().nullable() }))
-		.handler(async ({ input, context }) => {
-			try {
-				const envFiles = await configurations.getConfigurationEnvFilesForOrg(
-					input.configurationId,
-					context.orgId,
-				);
-				return { envFiles };
-			} catch (error) {
-				throwMappedConfigurationError(error, "Failed to fetch configuration env files");
-			}
-		}),
-
-	/**
 	 * Update service commands for a configuration.
 	 */
 	updateServiceCommands: orgProcedure
@@ -280,6 +262,36 @@ export const configurationsRouter = {
 				userId: context.user.id,
 				orgId: context.orgId,
 			});
+		}),
+
+	/**
+	 * List ready configurations (snapshots) for a repo.
+	 */
+	listSnapshots: orgProcedure
+		.input(z.object({ repoId: z.string().uuid() }))
+		.output(
+			z.object({
+				snapshots: z.array(
+					z.object({
+						id: z.string(),
+						snapshotId: z.string(),
+						createdAt: z.date().nullable(),
+					}),
+				),
+			}),
+		)
+		.handler(async ({ input, context }) => {
+			try {
+				// Verify the repo belongs to this org before listing snapshots
+				const repoExists = await repos.repoExists(input.repoId, context.orgId);
+				if (!repoExists) {
+					throw new ORPCError("NOT_FOUND", { message: "Repository not found" });
+				}
+				const snapshots = await configurations.listReadyConfigurationsForRepo(input.repoId);
+				return { snapshots };
+			} catch (error) {
+				throwMappedConfigurationError(error, "Failed to list snapshots");
+			}
 		}),
 
 	/**
