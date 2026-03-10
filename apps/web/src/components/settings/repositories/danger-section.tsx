@@ -22,7 +22,7 @@ export function DangerSection({ repoId, repoName }: { repoId: string; repoName: 
 
 	const handleDelete = async () => {
 		await deleteRepo.mutateAsync({ id: repoId });
-		router.push("/settings/repositories");
+		router.push("/settings/environments");
 	};
 
 	return (

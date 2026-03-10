@@ -358,9 +358,7 @@ export function CodingSession({
 	const isReady = !isLoading && !!authSession && !!sessionData && status !== "error";
 	const isSetupSession = sessionData?.sessionType === "setup";
 
-	const repoSettingsHref = sessionData?.repoId
-		? `/settings/repositories/${sessionData.repoId}`
-		: "/settings/repositories";
+	const repoSettingsHref = "/settings/environments";
 
 	const panelViewPicker = (
 		<div className="flex items-center gap-0.5">

@@ -90,9 +90,7 @@ export function RightPanel({
 	sessionKind = "worker",
 }: RightPanelProps) {
 	const { mode, togglePanel } = usePreviewPanelStore();
-	const repoSettingsHref = sessionProps?.repoId
-		? `/settings/repositories/${sessionProps.repoId}`
-		: "/settings/repositories";
+	const repoSettingsHref = "/settings/environments";
 
 	// If session isn't ready, show loading placeholder
 	if (!sessionProps?.sessionId && mode.type !== "url") {

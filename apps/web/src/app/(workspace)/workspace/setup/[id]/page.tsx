@@ -100,7 +100,7 @@ export default function SetupPage() {
 							<Link href={`/session/${existingSessionId}`}>Resume existing session</Link>
 						</Button>
 						<Button variant="outline" size="sm" asChild>
-							<Link href={`/settings/repositories/${repoId}`}>Back to repository</Link>
+							<Link href="/settings/environments">Back to environments</Link>
 						</Button>
 					</div>
 				</div>

@@ -3,10 +3,9 @@ import Link from "next/link";
 
 interface ExistingSetupSessionProps {
 	existingSessionId: string;
-	repoId: string;
 }
 
-export function ExistingSetupSession({ existingSessionId, repoId }: ExistingSetupSessionProps) {
+export function ExistingSetupSession({ existingSessionId }: ExistingSetupSessionProps) {
 	return (
 		<div className="flex h-full items-center justify-center">
 			<div className="text-center space-y-4 max-w-md">
@@ -21,7 +20,7 @@ export function ExistingSetupSession({ existingSessionId, repoId }: ExistingSetu
 						<Link href={`/session/${existingSessionId}`}>Resume existing session</Link>
 					</Button>
 					<Button variant="outline" size="sm" asChild>
-						<Link href={`/settings/repositories/${repoId}`}>Back to repository</Link>
+						<Link href="/settings/environments">Back to environments</Link>
 					</Button>
 				</div>
 			</div>

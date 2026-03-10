@@ -100,7 +100,7 @@ export function EnvironmentsPage() {
 							No repositories matching &ldquo;{repoFilter}&rdquo;
 						</p>
 					) : (
-						<div className="space-y-2 max-h-[420px] overflow-y-auto">
+						<div className="space-y-2">
 							{filteredRepos.map((repo) => (
 								<RepoEnvironmentRow
 									key={repo.id}

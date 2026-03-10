@@ -1,9 +1,12 @@
 "use client";
 
+import { BaselineSection } from "@/components/settings/repositories/baseline-section";
+import { DangerSection } from "@/components/settings/repositories/danger-section";
+import { ServiceCommandsSection } from "@/components/settings/repositories/service-commands-section";
+import { SetupRunSection } from "@/components/settings/repositories/setup-run-section";
 import { Button } from "@/components/ui/button";
-import { useConfigurations } from "@/hooks/sessions/use-configurations";
 import { cn } from "@/lib/display/utils";
-import { ChevronRight, ExternalLink } from "lucide-react";
+import { ChevronRight } from "lucide-react";
 import Link from "next/link";
 import { useState } from "react";
 
@@ -20,11 +23,6 @@ interface RepoEnvironmentRowProps {
 
 export function RepoEnvironmentRow({ repo, baseline }: RepoEnvironmentRowProps) {
 	const [expanded, setExpanded] = useState(false);
-	const { data: configurations } = useConfigurations("ready");
-
-	const repoConfigs = (configurations ?? []).filter((c) =>
-		c.configurationRepos?.some((cr: { repo: { id: string } | null }) => cr.repo?.id === repo.id),
-	);
 
 	const repoName = repo.githubRepoName.split("/").pop() || repo.githubRepoName;
 	const orgName = repo.githubRepoName.split("/")[0];
@@ -77,47 +75,11 @@ export function RepoEnvironmentRow({ repo, baseline }: RepoEnvironmentRowProps) 
 			</button>
 
 			{expanded && (
-				<div className="border-t border-border/50 px-4 py-3 pl-11 space-y-4">
-					{/* Ready configurations / snapshots */}
-					{repoConfigs.length > 0 ? (
-						<div>
-							<h3 className="text-xs font-medium text-muted-foreground mb-2">Environments</h3>
-							<div className="space-y-1.5">
-								{repoConfigs.map((config) => (
-									<div
-										key={config.id}
-										className="flex items-center justify-between text-sm py-1.5 px-2 rounded-md hover:bg-muted/30"
-									>
-										<div className="flex items-center gap-2 min-w-0">
-											<span className="truncate">
-												{config.name || `Environment ${config.id.slice(0, 8)}`}
-											</span>
-											<span className="text-xs text-muted-foreground">{config.status}</span>
-										</div>
-										{config.snapshotId && (
-											<span className="text-xs text-muted-foreground">
-												Snapshot: {config.snapshotId.slice(0, 8)}
-											</span>
-										)}
-									</div>
-								))}
-							</div>
-						</div>
-					) : (
-						<p className="text-xs text-muted-foreground">
-							No environments configured yet. Run setup to create one.
-						</p>
-					)}
-
-					{/* Link to repo detail */}
-					<div className="pt-1">
-						<Button variant="ghost" size="sm" className="h-7 text-xs gap-1.5" asChild>
-							<Link href={`/settings/repositories/${repo.id}`}>
-								View details
-								<ExternalLink className="h-3 w-3" />
-							</Link>
-						</Button>
-					</div>
+				<div className="border-t border-border/50 px-4 py-4 pl-11 space-y-6">
+					<BaselineSection repoId={repo.id} />
+					<ServiceCommandsSection repoId={repo.id} />
+					<SetupRunSection repoId={repo.id} />
+					<DangerSection repoId={repo.id} repoName={repo.githubRepoName} />
 				</div>
 			)}
 		</div>
